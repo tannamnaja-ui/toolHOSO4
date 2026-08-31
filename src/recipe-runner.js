@@ -120,12 +120,14 @@ async function resolveAllMaps(tgtCtx, recipe, rows) {
   return maps;
 }
 
-/** อ่านค่าสูงสุดของคอลัมน์ในตารางปลายทาง (ใช้กับ seqFromMax) */
+/** อ่านค่าสูงสุดของคอลัมน์ในตารางปลายทาง (ใช้กับ seqFromMax)
+ *  ไม่ใช้ coalesce เพื่อรองรับคอลัมน์ที่เป็นสตริงตัวเลขเติมศูนย์ (เช่น '0000123') */
 async function getMaxColumn(tgtCtx, schema, table, column) {
   const eng = tgtCtx.eng;
   const r = await eng.query(tgtCtx.pool,
-    'select coalesce(max(' + eng.quote(column) + '), 0) as m from ' + eng.qname(schema, table), []);
-  return Number(r.rows[0].m) || 0;
+    'select max(' + eng.quote(column) + ') as m from ' + eng.qname(schema, table), []);
+  const m = r.rows[0] && r.rows[0].m;
+  return Number(m) || 0;
 }
 
 /** ทำความสะอาดข้อความ: ตัด NUL (0x00) และ control char ตกค้าง (คง tab/LF/CR)
@@ -154,7 +156,12 @@ function valueFor(row, c, maps, unmatched, rowCtx) {
 }
 
 function rawValueFor(row, c, maps, unmatched, rowCtx) {
-  if (c.seqFromMax) return ((rowCtx && rowCtx.seqBase[c.col]) || 0) + ((rowCtx && rowCtx.index) || 0) + 1;
+  if (c.seqFromMax) {
+    const base = (rowCtx && rowCtx.seqBase[c.col]) || 0;
+    const n = base + ((rowCtx && rowCtx.index) || 0) + 1;
+    const pad = (c.seqFromMax && typeof c.seqFromMax === 'object' && c.seqFromMax.pad) ? c.seqFromMax.pad : 0;
+    return pad ? String(n).padStart(pad, '0') : n;   // เติมศูนย์เป็นสตริงถ้ากำหนด pad
+  }
   if (c.gen) return genValue(c.gen);
   if (Object.prototype.hasOwnProperty.call(c, 'const')) return c.const;
   let v = row[c.field];

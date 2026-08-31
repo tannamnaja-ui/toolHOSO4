@@ -13,6 +13,12 @@ register(require('./visit_ovst'));
 register(require('./visit_visit_pttype'));
 register(require('./visit_ovstdiag'));
 register(require('./visit_opdscreen'));
+register(require('./visit_opdscreen_cc_list'));
+register(require('./visit_oapp'));
+register(require('./visit_ipt'));
+register(require('./visit_drugusage'));
+register(require('./visit_ipt_order_no'));
+register(require('./visit_opitemrece'));
 
 function getRecipe(group, table) {
   return registry[group + ':' + table] || null;
