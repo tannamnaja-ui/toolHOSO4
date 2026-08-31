@@ -69,7 +69,7 @@ SELECT
     t.b_visit_office_id_refer_in AS rfrin,
     t.b_visit_office_id_refer_out AS rfrout,
 
-    q_map.b_visit_queue_setup_id AS spclty,
+    cur_d.b_service_point_id AS spclty,
 
     cur_d.b_service_point_id AS main_dep,
     last_d.b_service_point_id AS cur_dep,
@@ -148,7 +148,7 @@ module.exports = {
   lookups: {
     doctorCode:   { table: 'doctor',        match: 'oldcode',             ret: 'code' },
     pttypeCode:   { table: 'pttype',        match: 'hos_guid',            ret: 'pttype' },
-    spcltyCode:   { table: 'spclty',        match: 'oldcode',             ret: 'spclty' },
+    spcltyCode:   { table: 'kskdepartment', match: 'oldcode',             ret: 'spclty' },
     depCode:      { table: 'kskdepartment', match: 'oldcode',             ret: 'depcode' },
     officerLogin: { table: 'officer',       match: 'officer_doctor_code', ret: 'officer_login_name' },
     ovstostCode:  { table: 'ovstost',       match: 'hos_guid',            ret: 'ovstost' },
