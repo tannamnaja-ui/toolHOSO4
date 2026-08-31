@@ -150,6 +150,32 @@ function buildInsertIgnore(schema, table, cols, nRows, opt) {
   return `insert into ${qname(schema, table)} (${colList})${over} values ${tuples.join(', ')} on conflict do nothing`;
 }
 
+/** INSERT ธรรมดา (ไม่มี on conflict) — ใช้สำหรับ "วินิจฉัย" หาสาเหตุที่แถวไม่ถูกโอน */
+function buildInsertPlain(schema, table, cols, nRows, opt) {
+  const colList = cols.map(quote).join(', ');
+  const over = (opt && opt.overriding) ? ' overriding system value' : '';
+  let p = 1;
+  const tuples = [];
+  for (let r = 0; r < nRows; r++) tuples.push('(' + cols.map(() => ph(p++)).join(', ') + ')');
+  return `insert into ${qname(schema, table)} (${colList})${over} values ${tuples.join(', ')}`;
+}
+
+/** ลอง insert ใน transaction แล้ว ROLLBACK เสมอ — คืน { ok } หรือ { ok:false, error } */
+async function diagnoseInsert(pool, sql, params) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query({ text: sql, values: params });
+    await client.query('ROLLBACK');
+    return { ok: true };
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    return { ok: false, error: e };
+  } finally {
+    client.release();
+  }
+}
+
 /** ปรับ sequence ให้ตามค่าสูงสุดของคีย์ (PostgreSQL เท่านั้น) */
 async function syncSequences(pool, schema, table, keyColumns) {
   const fixed = [];
@@ -171,5 +197,5 @@ module.exports = {
   quote, qname, ph,
   createPool, endPool, query,
   testConnection, listTables, describeTable,
-  dateFilter, buildInsertIgnore, syncSequences
+  dateFilter, buildInsertIgnore, buildInsertPlain, diagnoseInsert, syncSequences
 };

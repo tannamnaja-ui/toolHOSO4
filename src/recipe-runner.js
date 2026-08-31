@@ -10,6 +10,7 @@
    ============================================================ */
 
 const crypto = require('crypto');
+const { buildKeyPredicate } = require('./transfer');
 
 const MAX_PARAMS = 30000;
 
@@ -41,6 +42,12 @@ function shortErr(e) {
 function keyStr(v) {
   if (v === null || v === undefined) return '';
   if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
+function fmt(v) {
+  if (v === null || v === undefined) return 'NULL';
+  if (v instanceof Date) return v.toISOString().slice(0, 19).replace('T', ' ');
   return String(v);
 }
 
@@ -151,22 +158,43 @@ function valueFor(row, c, maps, unmatched, rowCtx) {
   return v === undefined ? null : v;
 }
 
-/* ---------- หา key ปลายทางที่ยังไม่มี ---------- */
-async function findMissingKeyValues(tgtCtx, recipe, keyValues, onProgress) {
+/** ฟิลด์คีย์ (ฝั่ง query) และคอลัมน์คีย์ (ฝั่งปลายทาง) — รองรับทั้งเดี่ยวและหลายคอลัมน์ */
+function keyFieldsOf(recipe) {
+  return recipe.keyFields || (recipe.keyField ? [recipe.keyField] : recipe.targetKey.slice());
+}
+/** สตริงคีย์ประกอบ (normalize ให้ต้นทาง/ปลายทางเทียบกันได้ข้ามชนิด) */
+function compositeKey(vals) {
+  return JSON.stringify(vals.map(v => {
+    if (v === null || v === undefined) return null;
+    if (v instanceof Date) return 'D:' + v.toISOString();
+    if (Buffer.isBuffer(v)) return 'B:' + v.toString('base64');
+    return 'S:' + String(v);
+  }));
+}
+
+/* ---------- หาแถวที่ปลายทางยังไม่มี (ตามคีย์ เดี่ยวหรือหลายคอลัมน์) ---------- */
+async function findMissingRows(tgtCtx, recipe, rows, onProgress) {
   const eng = tgtCtx.eng;
-  const col = recipe.targetKey[0];
-  const q = eng.quote(col);
+  const keyFields = keyFieldsOf(recipe);      // ฟิลด์ในผลคิวรี่
+  const targetCols = recipe.targetKey;        // คอลัมน์ปลายทาง (เรียงตรงกับ keyFields)
+  const qcols = targetCols.map(eng.quote).join(', ');
   const table = eng.qname(recipe.schema || 'public', recipe.table);
-  const distinct = [...new Set(keyValues.map(keyStr).filter(v => v !== ''))];
-  const missing = new Set(distinct);
+  const size = Math.max(200, Math.min(2000, Math.floor(MAX_PARAMS / targetCols.length)));
+  const missing = [];
   let done = 0;
-  for (const batch of chunk(distinct, 2000)) {
-    let p = 1;
-    const ph = batch.map(() => eng.ph(p++)).join(', ');
-    const r = await eng.query(tgtCtx.pool, 'select ' + q + ' as k from ' + table + ' where ' + q + ' in (' + ph + ')', batch);
-    r.rows.forEach(row => missing.delete(keyStr(row.k)));
+  for (const batch of chunk(rows, size)) {
+    // สร้าง object คีย์ (keyed by คอลัมน์ปลายทาง) จากค่าฟิลด์ต้นทาง
+    const keyRows = batch.map(r => {
+      const o = {}; targetCols.forEach((tc, i) => { o[tc] = r[keyFields[i]]; }); return o;
+    });
+    const pred = buildKeyPredicate(eng, targetCols, keyRows, 1);
+    const res = await eng.query(tgtCtx.pool, 'select ' + qcols + ' from ' + table + ' where ' + pred.sql, pred.params, { array: true });
+    const exist = new Set(res.rows.map(arr => compositeKey(arr)));
+    for (const r of batch) {
+      if (!exist.has(compositeKey(keyFields.map(f => r[f])))) missing.push(r);
+    }
     done += batch.length;
-    if (onProgress) onProgress({ checked: done, total: distinct.length, missing: missing.size });
+    if (onProgress) onProgress({ checked: done, total: rows.length, missing: missing.length });
   }
   return missing;
 }
@@ -244,12 +272,14 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   }
   result.sourceRows = rows.length;
 
-  // dedupe ตาม key (เก็บแถวแรก)
+  // dedupe ตามคีย์ (เดี่ยว/หลายคอลัมน์) — เก็บแถวแรก, ข้ามแถวที่คีย์หลัก (ตัวแรก) ว่าง
+  const keyFields = keyFieldsOf(recipe);
   const seen = new Set();
   const uniq = [];
   for (const r of rows) {
-    const k = keyStr(r[recipe.keyField]);
-    if (!k || seen.has(k)) continue;
+    if (r[keyFields[0]] === null || r[keyFields[0]] === undefined || r[keyFields[0]] === '') continue;
+    const k = compositeKey(keyFields.map(f => r[f]));
+    if (seen.has(k)) continue;
     seen.add(k);
     uniq.push(r);
   }
@@ -262,11 +292,10 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
     return result;
   }
 
-  // 2) หา key ที่ปลายทางยังไม่มี
+  // 2) หาแถวที่ปลายทางยังไม่มี (ตามคีย์)
   emit({ type: 'stage', table: recipe.table, stage: 'ตรวจหาคีย์ที่ขาดในปลายทาง...' });
-  const missingSet = await findMissingKeyValues(tgtCtx, recipe, uniq.map(r => r[recipe.keyField]),
+  const missingRows = await findMissingRows(tgtCtx, recipe, uniq,
     p => emit(Object.assign({ type: 'progress', table: recipe.table, phase: 'check' }, p)));
-  const missingRows = uniq.filter(r => missingSet.has(keyStr(r[recipe.keyField])));
   result.missingRows = missingRows.length;
 
   if (!missingRows.length) {
@@ -343,4 +372,75 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   return result;
 }
 
-module.exports = { planRecipe, transferRecipe };
+/* ============================================================
+   วินิจฉัยแถวที่ "ขาดหาย" แต่ไม่ถูกโอน (หาเหตุผล)
+   ============================================================ */
+function reasonKey(msg) {
+  return String(msg)
+    .replace(/\([^)]*\)=\([^)]*\)/g, '(…)=(…)')  // pg detail: (col)=(value)
+    .replace(/'[^']*'/g, "'…'")
+    .replace(/"[^"]*"/g, '"…"')
+    .replace(/\d+/g, 'N')
+    .slice(0, 200);
+}
+function addReason(map, msg, sampleKey) {
+  const k = reasonKey(msg);
+  const g = map.get(k) || { reason: msg, count: 0, samples: [] };
+  g.count++;
+  if (g.samples.length < 5) g.samples.push(sampleKey);
+  map.set(k, g);
+}
+
+async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
+  limit = limit || 200;
+  const keyFields = keyFieldsOf(recipe);
+  const q = recipe.source.sql(from, to);
+  const rows = (await srcCtx.eng.query(srcCtx.pool, q.text, q.params)).rows;
+
+  const seen = new Set();
+  const uniq = [];
+  for (const r of rows) {
+    if (r[keyFields[0]] === null || r[keyFields[0]] === undefined || r[keyFields[0]] === '') continue;
+    const k = compositeKey(keyFields.map(f => r[f]));
+    if (seen.has(k)) continue;
+    seen.add(k);
+    uniq.push(r);
+  }
+  const stillMissing = await findMissingRows(tgtCtx, recipe, uniq);
+  const sample = stillMissing.slice(0, limit);
+
+  const maps = await resolveAllMaps(tgtCtx, recipe, sample);
+  const seqBase = {};
+  for (const c of recipe.columns) {
+    if (c.seqFromMax) seqBase[c.col] = await getMaxColumn(tgtCtx, recipe.schema || 'public', recipe.table, c.col);
+  }
+  const cols = recipe.columns.map(c => c.col);
+  const tgtEng = tgtCtx.eng;
+  const groups = new Map();
+  let okInsert = 0;
+
+  for (let i = 0; i < sample.length; i++) {
+    const row = sample[i];
+    const vals = recipe.columns.map(c => valueFor(row, c, maps, {}, { index: i, seqBase }));
+    const sql = tgtEng.buildInsertPlain(recipe.schema || 'public', recipe.table, cols, 1, { overriding: false });
+    const disp = keyFields.map(f => f + '=' + fmt(row[f])).join(', ');
+    const res = await tgtEng.diagnoseInsert(tgtCtx.pool, sql, vals);
+    if (res.ok) { okInsert++; addReason(groups, '__OK__', disp); }
+    else addReason(groups, shortErr(res.error), disp);
+  }
+
+  return finalizeDiagnose(recipe.table, stillMissing.length, sample.length, okInsert, groups);
+}
+
+function finalizeDiagnose(table, stillMissing, sampled, okInsert, groups) {
+  const list = [...groups.values()].map(g => ({
+    reason: g.reason === '__OK__'
+      ? 'ลอง insert เดี่ยวได้ปกติ — แถวถูกข้ามตอนโอนเพราะชนคีย์ภายในชุดเดียวกัน หรือคีย์จริงของตารางปลายทางต่างจากคีย์ที่ใช้ตรวจ (เช่น มี unique อื่น)'
+      : g.reason,
+    count: g.count,
+    samples: g.samples
+  })).sort((a, b) => b.count - a.count);
+  return { table, stillMissing, sampled, okInsert, groups: list };
+}
+
+module.exports = { planRecipe, transferRecipe, diagnoseRecipe, reasonKey, addReason, finalizeDiagnose };

@@ -166,6 +166,29 @@ function buildInsertIgnore(schema, table, cols, nRows /*, opt */) {
   return `insert ignore into ${qname(schema, table)} (${colList}) values ${tuples}`;
 }
 
+/** INSERT ธรรมดา (ไม่มี ignore) — ใช้สำหรับ "วินิจฉัย" หาสาเหตุที่แถวไม่ถูกโอน */
+function buildInsertPlain(schema, table, cols, nRows /*, opt */) {
+  const colList = cols.map(quote).join(', ');
+  const one = '(' + cols.map(() => '?').join(', ') + ')';
+  return `insert into ${qname(schema, table)} (${colList}) values ${new Array(nRows).fill(one).join(', ')}`;
+}
+
+/** ลอง insert ใน transaction แล้ว rollback เสมอ — คืน { ok } หรือ { ok:false, error } */
+async function diagnoseInsert(pool, sql, params) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query({ sql, values: params });
+    await conn.rollback();
+    return { ok: true };
+  } catch (e) {
+    try { await conn.rollback(); } catch (_) {}
+    return { ok: false, error: e };
+  } finally {
+    conn.release();
+  }
+}
+
 /** MySQL จัดการ auto_increment เองเมื่อ insert ค่า id ตรง ๆ — ไม่ต้องปรับ */
 async function syncSequences() { return []; }
 
@@ -174,5 +197,5 @@ module.exports = {
   quote, qname, ph, realSchema,
   createPool, endPool, query,
   testConnection, listTables, describeTable,
-  dateFilter, buildInsertIgnore, syncSequences
+  dateFilter, buildInsertIgnore, buildInsertPlain, diagnoseInsert, syncSequences
 };

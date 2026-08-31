@@ -41,8 +41,8 @@ module.exports = {
   schema: 'public',
   dateColumn: 'vstdate',
   targetDateColumn: 'vstdate',
-  targetKey: ['hos_guid'],   // t_diag_icd10_id — unique ต่อรายการวินิจฉัย
-  keyField: 'hos_guid',
+  targetKey: ['vn', 'icd10'],   // คีย์ประกอบ vn + icd10
+  keyFields: ['vn', 'icd10'],
 
   source: { engine: 'postgres', sql: sourceSql },
 

@@ -280,4 +280,59 @@ async function transferTable(srcCtx, tgtCtx, spec, from, to, emit, options) {
   return result;
 }
 
-module.exports = { planTable, compareTable, transferTable, shortErr, buildKeyPredicate, keyOf };
+/* ============================================================
+   วินิจฉัยแถวที่ "ขาดหาย" แต่ไม่ถูกโอน (ตารางปกติ)
+   ============================================================ */
+function reasonKey(msg) {
+  return String(msg)
+    .replace(/\([^)]*\)=\([^)]*\)/g, '(…)=(…)')
+    .replace(/'[^']*'/g, "'…'")
+    .replace(/"[^"]*"/g, '"…"')
+    .replace(/\d+/g, 'N')
+    .slice(0, 200);
+}
+
+async function diagnoseTable(srcCtx, tgtCtx, spec, from, to, limit) {
+  limit = limit || 200;
+  const plan = await planTable(srcCtx, tgtCtx, spec);
+  if (plan.error) return { table: spec.table, error: plan.error, groups: [] };
+
+  const srcKeys = await fetchSourceKeys(srcCtx, plan, from, to);
+  const missing = await findMissingKeys(tgtCtx, plan, srcKeys);
+  const sample = missing.slice(0, limit);
+
+  const srcEng = srcCtx.eng, tgtEng = tgtCtx.eng;
+  const cols = plan.columns;
+  const colList = cols.map(srcEng.quote).join(', ');
+  const keyIdx = plan.keyColumns.map(k => cols.indexOf(k)); // ตำแหน่งคีย์ในชุดคอลัมน์
+  const groups = new Map();
+  let okInsert = 0;
+
+  const readSize = Math.max(50, Math.min(500, Math.floor(30000 / plan.keyColumns.length)));
+  for (const batch of chunk(sample, readSize)) {
+    const pred = buildKeyPredicate(srcEng, plan.keyColumns, batch, 1);
+    const sel = 'select ' + colList + ' from ' + qname(plan.schema, plan.table) + ' where ' + pred.sql;
+    const rows = (await srcEng.query(srcCtx.pool, sel, pred.params, { array: true })).rows;
+    for (const r of rows) {
+      const sql = tgtEng.buildInsertPlain(plan.schema, plan.table, cols, 1, { overriding: plan.overriding });
+      const disp = plan.keyColumns.map((k, i) => k + '=' + fmt(r[keyIdx[i]])).join(', ');
+      const res = await tgtEng.diagnoseInsert(tgtCtx.pool, sql, r);
+      const key = res.ok ? '__OK__' : reasonKey(shortErr(res.error));
+      const g = groups.get(key) || { reason: res.ok ? '__OK__' : shortErr(res.error), count: 0, samples: [] };
+      g.count++; if (g.samples.length < 5) g.samples.push(disp);
+      groups.set(key, g);
+      if (res.ok) okInsert++;
+    }
+  }
+
+  const list = [...groups.values()].map(g => ({
+    reason: g.reason === '__OK__'
+      ? 'ลอง insert เดี่ยวได้ปกติ — แถวถูกข้ามตอนโอนเพราะชนคีย์ภายในชุดเดียวกัน หรือมี unique/PK อื่นในตารางปลายทาง'
+      : g.reason,
+    count: g.count, samples: g.samples
+  })).sort((a, b) => b.count - a.count);
+
+  return { table: plan.table, stillMissing: missing.length, sampled: sample.length, okInsert, groups: list };
+}
+
+module.exports = { planTable, compareTable, transferTable, diagnoseTable, shortErr, buildKeyPredicate, keyOf };

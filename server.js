@@ -117,6 +117,20 @@ app.post('/api/plan', wrap(async (req, res) => {
   res.json({ ok: true, plans: out });
 }));
 
+/** วินิจฉัยแถวที่ขาดหายแต่ไม่ถูกโอน — ลอง insert แบบ rollback เพื่อดึงสาเหตุ */
+app.post('/api/diagnose', wrap(async (req, res) => {
+  const srcCtx = db.getContext('source');
+  const tgtCtx = db.getContext('target');
+  const body = req.body || {};
+  const spec = body.table || {};
+  const limit = Math.min(1000, Math.max(20, Number(body.limit) || 200));
+  const recipe = getRecipe(body.group || '', spec.table);
+  const diagnose = recipe
+    ? await recipeRunner.diagnoseRecipe(recipe, srcCtx, tgtCtx, body.dateFrom, body.dateTo, limit)
+    : await transfer.diagnoseTable(srcCtx, tgtCtx, spec, body.dateFrom, body.dateTo, limit);
+  res.json({ ok: true, diagnose });
+}));
+
 /* ------------------------- Run (compare / transfer) ------------------------- */
 
 function readHistory() {

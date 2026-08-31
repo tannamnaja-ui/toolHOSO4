@@ -243,8 +243,87 @@ function addResultRow(r) {
     el('td', { class: 'num', style: r.inserted ? 'color:var(--mint-dark);font-weight:700' : '' }, [nf(r.inserted)]),
     el('td', { class: 'num', style: r.failed ? 'color:var(--danger-dark);font-weight:700' : '' }, [nf(r.failed)]),
     el('td', {}, [el('span', { class: 'badge ' + cls }, [text])]),
-    el('td', {}, [el('span', { class: 'small muted', title: note }, [note.length > 70 ? note.slice(0, 70) + '…' : note])])
+    el('td', {}, [el('span', { class: 'small muted', title: note }, [note.length > 70 ? note.slice(0, 70) + '…' : note])]),
+    el('td', {}, [diagnoseButton(r)])
   ]));
+}
+
+/** ปุ่มตรวจสอบข้อมูลที่ไม่ถูกโอน — แสดงเมื่อมีช่องว่าง (ขาดหาย > โอนสำเร็จ) หรือมีข้อผิดพลาด */
+function diagnoseButton(r) {
+  const gap = (r.missingRows || 0) - (r.inserted || 0);
+  const show = (r.status === 'ok' || r.status === 'partial') && (gap > 0 || (r.failed || 0) > 0);
+  if (!show) return el('span', { class: 'small muted' }, ['–']);
+  const btn = el('button', { class: 'btn btn-soft btn-xs', title: 'ตรวจสอบว่าทำไม ' + nf(gap) + ' แถวไม่ถูกโอน' },
+    ['🔎 ' + nf(gap) + ' แถว']);
+  btn.addEventListener('click', () => diagnoseTable(r.table, btn));
+  return btn;
+}
+
+async function diagnoseTable(tableName, btn) {
+  const t = (state.group.tables || []).find(x => x.table === tableName);
+  if (!t) { toast('ไม่พบตารางในรายการ', 'err'); return; }
+  const lr = state.lastRun || {};
+  const old = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin dark"></span> ตรวจ...'; }
+  try {
+    const r = await api('/api/diagnose', {
+      method: 'POST',
+      body: { group: GROUP_KEY, table: specOf(t), dateFrom: lr.dateFrom || null, dateTo: lr.dateTo || null, limit: 300 }
+    });
+    showDiagnoseModal(tableName, r.diagnose);
+  } catch (e) {
+    toast('ตรวจสอบไม่สำเร็จ: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = old; }
+  }
+}
+
+function showDiagnoseModal(tableName, d) {
+  const bg = el('div', { class: 'modal-bg' });
+  const groups = (d && d.groups) || [];
+  const body = [];
+
+  if (d && d.error) {
+    body.push(el('div', { class: 'alert alert-err' }, [d.error]));
+  } else {
+    body.push(el('div', { class: 'stats', style: 'margin-bottom:16px' }, [
+      el('div', { class: 'stat rose' }, [el('div', { class: 'k' }, ['ยังขาดในปลายทาง']), el('div', { class: 'v' }, [nf(d.stillMissing)])]),
+      el('div', { class: 'stat' }, [el('div', { class: 'k' }, ['สุ่มตรวจ (แถว)']), el('div', { class: 'v' }, [nf(d.sampled)])]),
+      el('div', { class: 'stat mint' }, [el('div', { class: 'k' }, ['insert เดี่ยวได้']), el('div', { class: 'v' }, [nf(d.okInsert)])])
+    ]));
+    if (d.sampled < d.stillMissing) {
+      body.push(el('div', { class: 'alert alert-info', style: 'margin-top:0' },
+        ['ตรวจแบบสุ่ม ' + nf(d.sampled) + ' จาก ' + nf(d.stillMissing) + ' แถวที่ยังขาด — เหตุผลด้านล่างเป็นตัวแทนของกลุ่มที่พบ']));
+    }
+    if (!groups.length) {
+      body.push(el('div', { class: 'alert alert-ok' }, ['ไม่พบแถวที่ยังขาด — ข้อมูลถูกโอนครบแล้ว ✓']));
+    } else {
+      groups.forEach((g, i) => {
+        body.push(el('div', { class: 'card', style: 'margin:0 0 12px' }, [
+          el('div', { class: 'card-body', style: 'padding:14px 16px' }, [
+            el('div', { style: 'display:flex;gap:10px;align-items:baseline;margin-bottom:6px' }, [
+              el('span', { class: 'badge badge-sun' }, ['พบ ' + nf(g.count) + ' แถว']),
+              el('span', { style: 'font-weight:700;color:var(--plum)' }, ['เหตุผลที่ ' + (i + 1)])
+            ]),
+            el('div', { class: 'mono small', style: 'color:var(--danger-dark);white-space:pre-wrap;word-break:break-word;margin-bottom:8px' }, [g.reason]),
+            el('div', { class: 'small muted' }, ['ตัวอย่างคีย์: ' + (g.samples || []).join('  ·  ')])
+          ])
+        ]));
+      });
+    }
+  }
+
+  bg.appendChild(el('div', { class: 'modal' }, [
+    el('div', { class: 'modal-head' }, [
+      el('span', { style: 'font-size:20px' }, ['🔎']),
+      el('h3', {}, ['ตรวจสอบข้อมูลที่ไม่ถูกโอน — ' + tableName]),
+      el('button', { class: 'x-btn', onclick: () => bg.remove() }, ['✕'])
+    ]),
+    el('div', { class: 'modal-body' }, body),
+    el('div', { class: 'modal-foot' }, [el('button', { class: 'btn btn-soft', onclick: () => bg.remove() }, ['ปิด'])])
+  ]));
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+  document.body.appendChild(bg);
 }
 
 async function run(dryRun) {
@@ -269,6 +348,7 @@ async function run(dryRun) {
   state.running = true;
   state.jobId = 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   state.lastResults = [];
+  state.lastRun = { dateFrom, dateTo, noDate };
 
   $('#run-card').classList.remove('hidden');
   $('#result-card').classList.remove('hidden');
