@@ -11,6 +11,8 @@ function register(recipe) {
 
 register(require('./visit_ovst'));
 register(require('./visit_visit_pttype'));
+register(require('./visit_ovstdiag'));
+register(require('./visit_opdscreen'));
 
 function getRecipe(group, table) {
   return registry[group + ':' + table] || null;

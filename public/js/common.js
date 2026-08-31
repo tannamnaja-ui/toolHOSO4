@@ -2,6 +2,10 @@
    toolHOSO4 — ฟังก์ชันร่วมของทุกหน้า
    ============================================================ */
 
+/* เวอร์ชันแอป — อัปเดตค่านี้เมื่อมีการแก้ไข (แสดงมุมซ้ายบนต่อจากชื่อ) */
+const APP_VERSION = 'v1.1.0';
+const APP_VERSION_DATE = '2026-08-31';
+
 const $  = (sel, root) => (root || document).querySelector(sel);
 const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 
@@ -110,8 +114,11 @@ function renderTopbar(activeKey) {
       el('a', { class: 'brand', href: 'index.html' }, [
         el('div', { class: 'brand-logo', text: '🌸' }),
         el('div', { class: 'brand-text' }, [
-          el('h1', { text: 'toolHOSO4' }),
-          el('p', { text: 'ระบบโอนข้อมูลระหว่างฐานข้อมูล PostgreSQL' })
+          el('h1', {}, [
+            'toolHOSO4 ',
+            el('span', { class: 'ver', title: 'เวอร์ชัน ' + APP_VERSION + ' · ' + APP_VERSION_DATE }, [APP_VERSION])
+          ]),
+          el('p', { text: 'ระบบโอนข้อมูลระหว่างฐานข้อมูล PostgreSQL / MySQL' })
         ])
       ]),
       el('nav', { class: 'nav' }, MENUS.map(m =>

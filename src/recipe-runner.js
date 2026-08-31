@@ -113,8 +113,18 @@ async function resolveAllMaps(tgtCtx, recipe, rows) {
   return maps;
 }
 
-/** คำนวณค่าของคอลัมน์ปลายทางหนึ่งช่อง */
-function valueFor(row, c, maps, unmatched) {
+/** อ่านค่าสูงสุดของคอลัมน์ในตารางปลายทาง (ใช้กับ seqFromMax) */
+async function getMaxColumn(tgtCtx, schema, table, column) {
+  const eng = tgtCtx.eng;
+  const r = await eng.query(tgtCtx.pool,
+    'select coalesce(max(' + eng.quote(column) + '), 0) as m from ' + eng.qname(schema, table), []);
+  return Number(r.rows[0].m) || 0;
+}
+
+/** คำนวณค่าของคอลัมน์ปลายทางหนึ่งช่อง
+ *  rowCtx = { index, seqBase } สำหรับคอลัมน์ที่รันเลขต่อจากค่าสูงสุด */
+function valueFor(row, c, maps, unmatched, rowCtx) {
+  if (c.seqFromMax) return ((rowCtx && rowCtx.seqBase[c.col]) || 0) + ((rowCtx && rowCtx.index) || 0) + 1;
   if (c.gen) return genValue(c.gen);
   if (Object.prototype.hasOwnProperty.call(c, 'const')) return c.const;
   let v = row[c.field];
@@ -282,11 +292,20 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
     return result;
   }
 
+  // 3.5) เตรียมค่าเริ่มต้นของคอลัมน์ที่รันเลขต่อจากค่าสูงสุดในปลายทาง (seqFromMax)
+  const seqBase = {};
+  for (const c of recipe.columns) {
+    if (c.seqFromMax) {
+      seqBase[c.col] = await getMaxColumn(tgtCtx, recipe.schema || 'public', recipe.table, c.col);
+      emit({ type: 'stage', table: recipe.table, stage: 'รันเลข ' + c.col + ' ต่อจาก ' + seqBase[c.col].toLocaleString() });
+    }
+  }
+
   // 4) สร้างแถว insert
   const tgtEng = tgtCtx.eng;
   const cols = recipe.columns.map(c => c.col);
   const unmatched = {};
-  const built = missingRows.map(row => recipe.columns.map(c => valueFor(row, c, maps, unmatched)));
+  const built = missingRows.map((row, i) => recipe.columns.map(c => valueFor(row, c, maps, unmatched, { index: i, seqBase })));
 
   const writeSize = Math.max(50, Math.min(500, Math.floor(MAX_PARAMS / Math.max(1, cols.length))));
   let inserted = 0, failed = 0;
