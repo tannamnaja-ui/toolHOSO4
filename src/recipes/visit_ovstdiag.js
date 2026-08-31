@@ -11,7 +11,8 @@ function sourceSql(from, to) {
   let where = '';
   if (from && to) {
     params.push(from, to);
-    where = 'WHERE v.visit_begin_visit_time::date BETWEEN $1::date AND $2::date';
+    // เทียบแบบช่วง (sargable) ให้ใช้ index บน visit_begin_visit_time ได้
+    where = "WHERE v.visit_begin_visit_time >= $1::date AND v.visit_begin_visit_time < ($2::date + interval '1 day')";
   }
 
   const text = `

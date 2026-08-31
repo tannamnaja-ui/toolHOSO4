@@ -11,7 +11,8 @@ function sourceSql(from, to) {
   let dateFilter = 'true';
   if (from && to) {
     params.push(from, to);
-    dateFilter = 'visit_begin_visit_time::date BETWEEN $1::date AND $2::date';
+    // เทียบแบบช่วง (sargable) เพื่อให้ใช้ index บน visit_begin_visit_time ได้ — เร็วกว่า ::date มาก
+    dateFilter = "visit_begin_visit_time >= $1::date AND visit_begin_visit_time < ($2::date + interval '1 day')";
   }
 
   const text = `
@@ -74,7 +75,7 @@ module.exports = {
   lookups: {},
 
   columns: [
-    { col: 'systom',      field: 'systom' },
+    { col: 'symptom',     field: 'systom' },
     { col: 'hos_guid',    field: 'hos_guid' },
     { col: 'vn',          field: 'vn' },
     { col: 'hn',          field: 'hn' },
