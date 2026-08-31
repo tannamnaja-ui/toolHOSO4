@@ -112,7 +112,7 @@ module.exports = {
     { col: 'vn',            field: 'vn' },
     { col: 'hn',            field: 'hn' },
     { col: 'an',            field: 'an' },
-    { col: 'icode',         field: 'icode',  lookup: 'sDrugIcode' },
+    { col: 'icode',         field: 'icode',  lookup: 'sDrugIcode', lookupKeepIfMissing: true },  // เทียบไม่เจอ -> ใช้ค่า icode เดิม
     { col: 'qty',           field: 'qty', numeric: true },
     { col: 'drugusage',     field: 'drugusage', lookup: 'drugusageCode' },  // ว่าง/null -> ไม่ lookup, ใส่ null
     { col: 'sp_use',        field: 'sp_use' },

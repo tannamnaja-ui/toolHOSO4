@@ -167,9 +167,12 @@ function rawValueFor(row, c, maps, unmatched, rowCtx) {
   let v = row[c.field];
   if (c.lookup) {
     const m = maps[c.lookup];
-    if (v === null || v === undefined || v === '') return null;
-    if (m && m.has(keyStr(v))) return m.get(keyStr(v));
-    if (unmatched) (unmatched[c.lookup] || (unmatched[c.lookup] = new Set())).add(keyStr(v));
+    const empty = (v === null || v === undefined || v === '');
+    if (!empty && m && m.has(keyStr(v))) return m.get(keyStr(v));
+    // ไม่พบค่าที่ตรง (หรือค่าว่าง)
+    if (!empty && c.lookupKeepIfMissing) return v;                                     // ใช้ค่าเดิม
+    if (Object.prototype.hasOwnProperty.call(c, 'lookupDefault')) return c.lookupDefault; // ใช้ค่า default
+    if (!empty && unmatched) (unmatched[c.lookup] || (unmatched[c.lookup] = new Set())).add(keyStr(v));
     return null;
   }
   if (c.lookupChain) {
@@ -192,6 +195,16 @@ function rawValueFor(row, c, maps, unmatched, rowCtx) {
 function keyFieldsOf(recipe) {
   return recipe.keyFields || (recipe.keyField ? [recipe.keyField] : recipe.targetKey.slice());
 }
+/** แถวควรถูกข้ามไหม (ฟิลด์ที่กำหนดใน skipWhenEmpty ว่าง = ไม่นำเข้า) */
+function shouldSkipRow(recipe, row) {
+  const list = recipe.skipWhenEmpty;
+  if (!list || !list.length) return false;
+  return list.some(f => {
+    const v = row[f];
+    return v === null || v === undefined || String(v).trim() === '';
+  });
+}
+
 /** สตริงคีย์ประกอบ (normalize ให้ต้นทาง/ปลายทางเทียบกันได้ข้ามชนิด) */
 function compositeKey(vals) {
   return JSON.stringify(vals.map(v => {
@@ -314,6 +327,7 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   const uniq = [];
   for (const r of rows) {
     if (r[keyFields[0]] === null || r[keyFields[0]] === undefined || r[keyFields[0]] === '') continue;
+    if (shouldSkipRow(recipe, r)) continue;   // ข้ามแถวที่ฟิลด์ skipWhenEmpty ว่าง
     const k = compositeKey(keyFields.map(f => r[f]));
     if (seen.has(k)) continue;
     seen.add(k);
@@ -435,6 +449,7 @@ async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
   const uniq = [];
   for (const r of rows) {
     if (r[keyFields[0]] === null || r[keyFields[0]] === undefined || r[keyFields[0]] === '') continue;
+    if (shouldSkipRow(recipe, r)) continue;   // ข้ามแถวที่ฟิลด์ skipWhenEmpty ว่าง
     const k = compositeKey(keyFields.map(f => r[f]));
     if (seen.has(k)) continue;
     seen.add(k);

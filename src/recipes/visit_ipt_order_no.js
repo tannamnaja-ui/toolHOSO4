@@ -79,7 +79,7 @@ module.exports = {
   lookups: {
     doctorCode:   { table: 'doctor',  match: 'oldcode',             ret: 'code' },
     officerLogin: { table: 'officer', match: 'officer_doctor_code', ret: 'officer_login_name' },
-    wardCode:     { table: 'ward',    match: 'hos_guid',            ret: 'ward' }
+    wardCode:     { table: 'ipt',     match: 'hos_guid',            ret: 'ward' }
   },
 
   columns: [

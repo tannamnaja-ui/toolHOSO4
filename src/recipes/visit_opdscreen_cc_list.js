@@ -52,6 +52,7 @@ module.exports = {
   dateColumn: 'update_datetime',
   targetKey: ['hos_guid'],   // t_visit_primary_symptom_id — unique ต่อรายการ
   keyField: 'hos_guid',
+  skipWhenEmpty: ['cc'],     // ถ้า cc ว่าง ไม่นำเข้า
 
   source: { engine: 'postgres', sql: sourceSql },
 

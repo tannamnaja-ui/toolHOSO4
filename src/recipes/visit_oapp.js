@@ -55,7 +55,7 @@ LEFT JOIN LATERAL (
                 SELECT tv.t_visit_id
                 FROM public.t_visit tv
                 WHERE tv.t_patient_id = app.t_patient_id
-                  AND SUBSTRING(tv.visit_begin_visit_time::text, 1, 10) < SUBSTRING(app.record_date_time::text, 1, 10)
+                  AND tv.visit_begin_visit_time < date_trunc('day', app.record_date_time)
                 ORDER BY tv.visit_begin_visit_time DESC
                 LIMIT 1
             )
@@ -102,7 +102,7 @@ module.exports = {
     { col: 'vstdate',         field: 'vstdate' },
     { col: 'nextdate',        field: 'nextdate' },
     { col: 'nexttime',        field: 'nexttime' },
-    { col: 'clinic',          field: 'clinic',  lookup: 'clinicCode' },
+    { col: 'clinic',          field: 'clinic',  lookup: 'clinicCode', lookupDefault: '999' },  // เทียบไม่เจอ/ว่าง -> 999
     { col: 'depcode',         field: 'depcode', lookup: 'depCode' },
     { col: 'spclty',          field: 'spclty',  lookup: 'depSpclty' },
     { col: 'doctor',          field: 'doctor',  lookup: 'doctorCode' },
