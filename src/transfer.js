@@ -5,12 +5,53 @@
    ctx = { pool, eng }  โดย eng คือ module ใน src/engines
    ============================================================ */
 
+const iconv = require('iconv-lite');
+
 const MAX_PARAMS = 30000;
 
 /** ตัดอักขระควบคุมที่ทำให้ insert ล้มเหลว (คง tab/LF/CR) — ข้อมูลเก่า/WIN874 */
 const CTRL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
 function cleanText(v) {
   return (typeof v === "string") ? v.replace(CTRL_RE, "") : v;
+}
+
+/* ---------- ตัดอักขระที่เก็บใน WIN874/TIS-620 ไม่ได้ (เก็บที่เหลือไว้) ---------- */
+const win874Cache = new Map();
+function charOkWin874(ch) {
+  if (ch.charCodeAt(0) < 0x80) return true;
+  if (win874Cache.has(ch)) return win874Cache.get(ch);
+  const enc = iconv.encode(ch, 'win874');
+  const ok = !(enc.length === 1 && enc[0] === 0x3F && ch !== '?');
+  win874Cache.set(ch, ok);
+  return ok;
+}
+function stripToWin874(str) {
+  let out = '';
+  for (const ch of str) if (charOkWin874(ch)) out += ch;
+  return out;
+}
+
+/** ตรวจ encoding ปลายทาง: 'WIN874' ถ้าปลายทางเก็บไทยแบบ WIN874/TIS-620 (ตั้งเอง หรือ PG server_encoding) */
+async function detectTargetEncoding(tgtCtx) {
+  if (String(tgtCtx.encoding || '').toUpperCase() === 'WIN874') return 'WIN874';
+  if (tgtCtx.eng.name === 'postgres') {
+    try {
+      const r = await tgtCtx.eng.query(tgtCtx.pool, 'show server_encoding', []);
+      const enc = String((r.rows[0] && (r.rows[0].server_encoding || Object.values(r.rows[0])[0])) || '').toUpperCase();
+      if (enc === 'WIN874' || enc === 'TIS620') return 'WIN874';
+    } catch (e) {}
+  }
+  return '';
+}
+
+/** คืนฟังก์ชันทำความสะอาดค่า string ตาม encoding ปลายทาง (control chars + WIN874 strip) */
+function makeValueSanitizer(tgtEncoding) {
+  const strip = String(tgtEncoding).toUpperCase() === 'WIN874';
+  return function (v) {
+    if (typeof v !== 'string') return v;
+    const c = cleanText(v);
+    return strip ? stripToWin874(c) : c;
+  };
 }
 
 /** เงื่อนไขคีย์: (k1,k2) IN ((..),(..)) โดยใช้ placeholder ของ engine นั้น */
@@ -240,6 +281,11 @@ async function transferTable(srcCtx, tgtCtx, spec, from, to, emit, options) {
   const readSize = Math.max(100, Math.min(1000, Math.floor(MAX_PARAMS / plan.keyColumns.length)));
   const writeSize = Math.max(50, Math.min(500, Math.floor(MAX_PARAMS / Math.max(1, cols.length))));
 
+  // ทำความสะอาดข้อความ: ตัด control chars + อักขระที่ปลายทาง WIN874 เก็บไม่ได้ (เก็บที่เหลือ ไม่ทิ้งทั้งแถว)
+  const tgtEncoding = await detectTargetEncoding(tgtCtx);
+  const sanitize = makeValueSanitizer(tgtEncoding);
+  if (tgtEncoding === 'WIN874') emit({ type: 'stage', table: plan.table, stage: 'ปลายทางเป็น WIN874 — จะตัดอักขระที่เก็บไม่ได้ออก' });
+
   let inserted = 0, failed = 0;
   const errors = [];
   emit({ type: 'stage', table: plan.table, stage: 'กำลังโอน ' + missing.length.toLocaleString() + ' แถว...' });
@@ -249,8 +295,7 @@ async function transferTable(srcCtx, tgtCtx, spec, from, to, emit, options) {
     const pred = buildKeyPredicate(srcEng, plan.keyColumns, keyBatch, 1);
     const sel = 'select ' + srcColList + ' from ' + srcEng.qname(plan.schema, plan.table) + ' where ' + pred.sql;
     const rowsRaw = (await srcEng.query(srcCtx.pool, sel, pred.params, { array: true })).rows;
-    // ทำความสะอาดข้อความ: ตัดอักขระควบคุมที่ทำให้ insert ล้มเหลวทั้งแถว (ข้อมูลเก่า/WIN874)
-    const rows = rowsRaw.map(r => r.map(cleanText));
+    const rows = rowsRaw.map(r => r.map(sanitize));
 
     for (const rowBatch of chunk(rows, writeSize)) {
       if (options.isCancelled && options.isCancelled()) { result.cancelled = true; break; }
@@ -418,5 +463,5 @@ async function diagnoseTable(srcCtx, tgtCtx, spec, from, to, limit) {
 
 module.exports = {
   planTable, compareTable, transferTable, diagnoseTable, shortErr, buildKeyPredicate, keyOf,
-  reasonKey, extractField, makeReasonGrouper
+  reasonKey, extractField, makeReasonGrouper, detectTargetEncoding, makeValueSanitizer, stripToWin874
 };

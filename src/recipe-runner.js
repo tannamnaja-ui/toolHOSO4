@@ -10,7 +10,7 @@
    ============================================================ */
 
 const crypto = require('crypto');
-const { buildKeyPredicate, extractField, makeReasonGrouper } = require('./transfer');
+const { buildKeyPredicate, extractField, makeReasonGrouper, detectTargetEncoding, stripToWin874 } = require('./transfer');
 
 const MAX_PARAMS = 30000;
 
@@ -366,7 +366,11 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   const tgtEng = tgtCtx.eng;
   const cols = recipe.columns.map(c => c.col);
   const unmatched = {};
-  const built = missingRows.map((row, i) => recipe.columns.map(c => valueFor(row, c, maps, unmatched, { index: i, seqBase })));
+  // ถ้าปลายทางเป็น WIN874 ให้ตัดอักขระที่เก็บไม่ได้ออก (เก็บที่เหลือ ไม่ทิ้งทั้งแถว)
+  const tgtEncoding = await detectTargetEncoding(tgtCtx);
+  const encStrip = tgtEncoding === 'WIN874' ? (v => (typeof v === 'string' ? stripToWin874(v) : v)) : (v => v);
+  if (tgtEncoding === 'WIN874') emit({ type: 'stage', table: recipe.table, stage: 'ปลายทางเป็น WIN874 — จะตัดอักขระที่เก็บไม่ได้ออก' });
+  const built = missingRows.map((row, i) => recipe.columns.map(c => encStrip(valueFor(row, c, maps, unmatched, { index: i, seqBase }))));
 
   const writeSize = Math.max(50, Math.min(500, Math.floor(MAX_PARAMS / Math.max(1, cols.length))));
   let inserted = 0, failed = 0;
@@ -449,9 +453,12 @@ async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
     t.columns.forEach(c => { colTypes[c.name] = c.type; });
   } catch (e) {}
 
+  const tgtEncoding = await detectTargetEncoding(tgtCtx);
+  const encStrip = tgtEncoding === 'WIN874' ? (v => (typeof v === 'string' ? stripToWin874(v) : v)) : (v => v);
+
   for (let i = 0; i < sample.length; i++) {
     const row = sample[i];
-    const vals = recipe.columns.map(c => valueFor(row, c, maps, {}, { index: i, seqBase }));
+    const vals = recipe.columns.map(c => encStrip(valueFor(row, c, maps, {}, { index: i, seqBase })));
     const sql = tgtEng.buildInsertPlain(recipe.schema || 'public', recipe.table, cols, 1, { overriding: false });
     const disp = keyFields.map(f => f + '=' + fmt(row[f])).join(', ');
     const res = await tgtEng.diagnoseInsert(tgtCtx.pool, sql, vals);

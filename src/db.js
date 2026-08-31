@@ -19,13 +19,14 @@ function getContext(side) {
     throw new Error('ยังไม่ได้ตั้งค่าการเชื่อมต่อฝั่ง' + (side === 'source' ? 'ต้นทาง' : 'ปลายทาง'));
   }
   const eng = getEngine(cfg.engine);
+  const encoding = cfg.encoding || '';
   const key = poolKey(cfg);
   const cached = pools.get(side);
-  if (cached && cached.key === key) return { pool: cached.pool, eng: cached.eng };
+  if (cached && cached.key === key) return { pool: cached.pool, eng: cached.eng, encoding: cached.encoding };
   if (cached) { cached.eng.endPool(cached.pool).catch(() => {}); pools.delete(side); }
   const pool = eng.createPool(cfg, 6);
-  pools.set(side, { key, pool, eng });
-  return { pool, eng };
+  pools.set(side, { key, pool, eng, encoding });
+  return { pool, eng, encoding };
 }
 
 function getPool(side) { return getContext(side).pool; }
