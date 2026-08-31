@@ -169,8 +169,6 @@ module.exports = {
     { col: 'oqueue',     field: 'oqueue' },
     { col: 'pttype',     field: 'pttype',   lookup: 'pttypeCode' },
     { col: 'pttypeno',   field: 'pttypeno' },
-    { col: 'rfrin',      field: 'rfrin' },
-    { col: 'rfrout',     field: 'rfrout' },
     { col: 'spclty',     field: 'spclty',   lookup: 'spcltyCode' },
     { col: 'main_dep',   field: 'main_dep', lookup: 'depCode' },
     { col: 'cur_dep',    field: 'cur_dep',  lookup: 'depCode' },

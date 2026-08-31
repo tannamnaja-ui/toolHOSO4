@@ -2,15 +2,64 @@
   "name": "toolhoso4",
   "version": "1.0.0",
   "description": "ระบบโอนข้อมูลระหว่างฐานข้อมูล (Source -> Target) รองรับ PostgreSQL และ MySQL ตามวันที่และตารางที่เลือก",
-  "main": "server.js",
+  "author": "tannamnaja-ui",
+  "main": "electron/main.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "app": "electron .",
+    "icon": "node build/make-icon.js",
+    "dist": "node build/make-icon.js && electron-builder --win nsis"
   },
   "dependencies": {
     "express": "^4.19.2",
     "mysql2": "^3.24.2",
     "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^2.1.8"
+  },
+  "build": {
+    "appId": "com.hosos.tohosxp",
+    "productName": "HOSOS to HOSxP",
+    "copyright": "toolHOSOS",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "server.js",
+      "src/**",
+      "public/**",
+      "default-config/**",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "HOSOS_to_HOSxP.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": true,
+      "allowElevation": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HOSOS to HOSxP",
+      "artifactName": "HOSOS_to_HOSxP.${ext}",
+      "uninstallDisplayName": "HOSOS to HOSxP"
+    }
   }
 }

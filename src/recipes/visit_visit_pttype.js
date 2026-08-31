@@ -5,13 +5,13 @@
    ปลายทาง: HOSxP (visit_pttype) — PostgreSQL หรือ MySQL
    ============================================================ */
 
-/** คิวรี่ต้นทางตามช่วงวันที่ที่เลือก (from..to แบบ 'YYYY-MM-DD') — กรองตาม visit_payment_card_issue_date */
+/** คิวรี่ต้นทางตามช่วงวันที่ที่เลือก (from..to แบบ 'YYYY-MM-DD') — กรองตามวันที่มารับบริการ (visit_begin_visit_time) */
 function sourceSql(from, to) {
   const params = [];
   let where = '';
   if (from && to) {
     params.push(from, to);
-    where = 'WHERE vp.visit_payment_card_issue_date::date BETWEEN $1::date AND $2::date';
+    where = "WHERE TO_CHAR(t.visit_begin_visit_time::timestamp, 'YYYY-MM-DD') BETWEEN $1 AND $2";
   }
 
   const text = `

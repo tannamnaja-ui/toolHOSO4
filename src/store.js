@@ -3,12 +3,23 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const CONFIG_DIR = path.join(__dirname, '..', 'config');
+// เก็บไฟล์ตั้งค่าไว้ในโฟลเดอร์ที่เขียนได้ (สำคัญเมื่อรันแบบ packaged/Electron)
+// กำหนดผ่าน env TOOLHOSO4_CONFIG_DIR ได้ ไม่งั้นใช้ ../config (ตอน dev)
+const CONFIG_DIR = process.env.TOOLHOSO4_CONFIG_DIR || path.join(__dirname, '..', 'config');
 const CONN_FILE = path.join(CONFIG_DIR, 'connections.json');
 const TABLE_FILE = path.join(CONFIG_DIR, 'tables.json');
 const KEY_FILE = path.join(CONFIG_DIR, '.key');
 
 if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+
+// เมื่อรันครั้งแรก (โฟลเดอร์ตั้งค่าว่าง) ให้คัดลอกค่าเริ่มต้นที่แถมมากับโปรแกรม
+const DEFAULTS_DIR = path.join(__dirname, '..', 'default-config');
+try {
+  const defTables = path.join(DEFAULTS_DIR, 'tables.json');
+  if (!fs.existsSync(TABLE_FILE) && fs.existsSync(defTables)) {
+    fs.copyFileSync(defTables, TABLE_FILE);
+  }
+} catch (e) { /* ไม่มีค่าเริ่มต้นก็ไม่เป็นไร */ }
 
 /* ---------- การเข้ารหัสรหัสผ่าน (AES-256-GCM) ---------- */
 function getKey() {

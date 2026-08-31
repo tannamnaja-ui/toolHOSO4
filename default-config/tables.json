@@ -1,0 +1,253 @@
+{
+  "basic": {
+    "key": "basic",
+    "name": "ข้อมูลพื้นฐาน (Basic Data)",
+    "icon": "🗂️",
+    "tables": []
+  },
+  "master": {
+    "key": "master",
+    "name": "ข้อมูลคนไข้ (Master Data)",
+    "icon": "🧑‍⚕️",
+    "tables": []
+  },
+  "visit": {
+    "key": "visit",
+    "name": "ข้อมูลประวัติ (Visit Data)",
+    "icon": "📋",
+    "tables": [
+      {
+        "table": "ovst",
+        "schema": "public",
+        "label": "การมารับบริการ OPD (หลัก)",
+        "keyColumns": [],
+        "dateColumn": "vstdate",
+        "enabled": true
+      },
+      {
+        "table": "visit_pttype",
+        "schema": "public",
+        "label": "สิทธิการรักษาของ visit",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "ovstdiag",
+        "schema": "public",
+        "label": "การวินิจฉัย OPD",
+        "keyColumns": [],
+        "dateColumn": "vstdate",
+        "enabled": true
+      },
+      {
+        "table": "opdscreen",
+        "schema": "public",
+        "label": "คัดกรอง OPD",
+        "keyColumns": [],
+        "dateColumn": "vstdate",
+        "enabled": true
+      },
+      {
+        "table": "opdscreen_cc_list",
+        "schema": "public",
+        "label": "อาการสำคัญ (CC)",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "patient_history_hpi",
+        "schema": "public",
+        "label": "ประวัติการเจ็บป่วยปัจจุบัน (HPI)",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "opdscreen_advice",
+        "schema": "public",
+        "label": "คำแนะนำ",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "opdscreen_bp",
+        "schema": "public",
+        "label": "สัญญาณชีพ/ความดัน",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "oapp",
+        "schema": "public",
+        "label": "นัดหมาย",
+        "keyColumns": [],
+        "dateColumn": "vstdate",
+        "enabled": true
+      },
+      {
+        "table": "ipt",
+        "schema": "public",
+        "label": "การรับไว้ในหอผู้ป่วย (IPD หลัก)",
+        "keyColumns": [],
+        "dateColumn": "regdate",
+        "enabled": true
+      },
+      {
+        "table": "ipt_pttype",
+        "schema": "public",
+        "label": "สิทธิการรักษา IPD",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "iptdiag",
+        "schema": "public",
+        "label": "การวินิจฉัย IPD",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "iptoprt",
+        "schema": "public",
+        "label": "หัตถการ IPD",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "ipt_order_no",
+        "schema": "public",
+        "label": "เลขที่ order IPD",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "drugusage",
+        "schema": "public",
+        "label": "วิธีใช้ยา",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "rcpt_print",
+        "schema": "public",
+        "label": "ใบเสร็จรับเงิน",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "rcpt_debt",
+        "schema": "public",
+        "label": "ลูกหนี้ใบเสร็จ",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "opitemrece",
+        "schema": "public",
+        "label": "รายการค่าใช้จ่าย/เวชภัณฑ์",
+        "keyColumns": [],
+        "dateColumn": "rxdate",
+        "enabled": true
+      },
+      {
+        "table": "Update finance rcpt",
+        "schema": "public",
+        "label": "อัปเดตการเงิน rcpt — รอเขียนคำสั่ง (UPDATE)",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": false
+      },
+      {
+        "table": "Update finance debt",
+        "schema": "public",
+        "label": "อัปเดตการเงิน debt — รอเขียนคำสั่ง (UPDATE)",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": false
+      },
+      {
+        "table": "opi_dispense",
+        "schema": "public",
+        "label": "การจ่ายยา",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "lab_head",
+        "schema": "public",
+        "label": "ใบสั่งตรวจแล็บ (หัว)",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "lab_order",
+        "schema": "public",
+        "label": "รายการแล็บ",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "lab_order_service",
+        "schema": "public",
+        "label": "บริการแล็บ",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "Update(lab_link)",
+        "schema": "public",
+        "label": "อัปเดต lab_link — รอเขียนคำสั่ง (UPDATE)",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": false
+      },
+      {
+        "table": "xray_head",
+        "schema": "public",
+        "label": "ใบสั่งเอกซเรย์ (หัว)",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "xray_report",
+        "schema": "public",
+        "label": "ผลอ่านเอกซเรย์",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "xrayxn",
+        "schema": "public",
+        "label": "เลขที่เอกซเรย์",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      },
+      {
+        "table": "patient_visit_doctor_note",
+        "schema": "public",
+        "label": "บันทึกแพทย์",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      }
+    ]
+  }
+}

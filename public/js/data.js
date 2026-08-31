@@ -337,6 +337,13 @@ async function run(dryRun) {
         else if (dryRun) logLine('   พบข้อมูลขาด ' + nf(r.missingRows) + ' แถว (จากต้นทาง ' + nf(r.sourceRows) + ')', r.missingRows ? 'warn' : 'ok');
         else logLine('   โอนสำเร็จ ' + nf(r.inserted) + ' แถว' + (r.failed ? ' · ล้มเหลว ' + nf(r.failed) : ''), r.failed ? 'warn' : 'ok');
         if (r.sequences && r.sequences.length) logLine('   ปรับ sequence: ' + r.sequences.join(', '), 'dim');
+        // แสดงสาเหตุที่ล้มเหลว (ข้อความ error จากฐานข้อมูลปลายทาง)
+        if (r.failed && r.errors && r.errors.length) {
+          const uniq = [...new Set(r.errors)];
+          uniq.slice(0, 3).forEach(e => logLine('   ✕ ' + e, 'err'));
+          if (uniq.length > 3) logLine('   … และอีก ' + (uniq.length - 3) + ' รูปแบบข้อผิดพลาด', 'err');
+        }
+        if (r.warnings && r.warnings.length) r.warnings.forEach(w => logLine('   ⚠ ' + w, 'warn'));
       } else if (ev.type === 'cancelled') {
         logLine('ผู้ใช้ยกเลิกการทำงาน', 'warn');
       } else if (ev.type === 'done') {

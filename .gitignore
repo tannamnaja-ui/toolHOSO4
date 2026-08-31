@@ -3,3 +3,5 @@ config/connections.json
 config/.key
 *.log
 config/history.json
+dist/
+default-config/history.json

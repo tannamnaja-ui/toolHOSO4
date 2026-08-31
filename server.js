@@ -221,11 +221,21 @@ app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log('');
-  console.log('  \x1b[35m╭──────────────────────────────────────────────╮\x1b[0m');
-  console.log('  \x1b[35m│\x1b[0m  \x1b[95mtoolHOSO4\x1b[0m — ระบบโอนข้อมูล PostgreSQL       \x1b[35m│\x1b[0m');
-  console.log('  \x1b[35m│\x1b[0m  http://localhost:' + PORT + '                     \x1b[35m│\x1b[0m');
-  console.log('  \x1b[35m╰──────────────────────────────────────────────╯\x1b[0m');
-  console.log('');
-});
+/** เริ่มเซิร์ฟเวอร์ คืนค่า http.Server (ใช้ทั้งตอนรันตรง ๆ และเรียกจาก Electron) */
+function start(port) {
+  const p = port || PORT;
+  const server = app.listen(p, () => {
+    console.log('');
+    console.log('  \x1b[35m╭──────────────────────────────────────────────╮\x1b[0m');
+    console.log('  \x1b[35m│\x1b[0m  \x1b[95mtoolHOSO4\x1b[0m — ระบบโอนข้อมูล PostgreSQL       \x1b[35m│\x1b[0m');
+    console.log('  \x1b[35m│\x1b[0m  http://localhost:' + p + '                     \x1b[35m│\x1b[0m');
+    console.log('  \x1b[35m╰──────────────────────────────────────────────╯\x1b[0m');
+    console.log('');
+  });
+  return server;
+}
+
+// รันตรง ๆ ด้วย node server.js → เริ่มทันที; ถ้า require เข้ามา (Electron) ให้เรียก start() เอง
+if (require.main === module) start();
+
+module.exports = { app, start, PORT };
