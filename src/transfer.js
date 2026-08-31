@@ -7,6 +7,12 @@
 
 const MAX_PARAMS = 30000;
 
+/** ตัดอักขระควบคุมที่ทำให้ insert ล้มเหลว (คง tab/LF/CR) — ข้อมูลเก่า/WIN874 */
+const CTRL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+function cleanText(v) {
+  return (typeof v === "string") ? v.replace(CTRL_RE, "") : v;
+}
+
 /** เงื่อนไขคีย์: (k1,k2) IN ((..),(..)) โดยใช้ placeholder ของ engine นั้น */
 function buildKeyPredicate(eng, keyColumns, keyRows, startIdx) {
   const cols = keyColumns.map(eng.quote).join(', ');
@@ -242,7 +248,9 @@ async function transferTable(srcCtx, tgtCtx, spec, from, to, emit, options) {
     if (options.isCancelled && options.isCancelled()) { result.cancelled = true; break; }
     const pred = buildKeyPredicate(srcEng, plan.keyColumns, keyBatch, 1);
     const sel = 'select ' + srcColList + ' from ' + srcEng.qname(plan.schema, plan.table) + ' where ' + pred.sql;
-    const rows = (await srcEng.query(srcCtx.pool, sel, pred.params, { array: true })).rows;
+    const rowsRaw = (await srcEng.query(srcCtx.pool, sel, pred.params, { array: true })).rows;
+    // ทำความสะอาดข้อความ: ตัดอักขระควบคุมที่ทำให้ insert ล้มเหลวทั้งแถว (ข้อมูลเก่า/WIN874)
+    const rows = rowsRaw.map(r => r.map(cleanText));
 
     for (const rowBatch of chunk(rows, writeSize)) {
       if (options.isCancelled && options.isCancelled()) { result.cancelled = true; break; }
@@ -292,6 +300,78 @@ function reasonKey(msg) {
     .slice(0, 200);
 }
 
+/** เดาว่าค่าตรงกับชนิดข้อมูลปลายทางไหม (ใช้ fallback หาคอลัมน์ที่ผิดชนิด) */
+function valueFitsType(v, target) {
+  const s = String(v).trim();
+  if (/int|numeric|decimal|double|real|money|float/.test(target)) return s !== '' && Number.isFinite(Number(s));
+  if (/date|time/.test(target)) return !isNaN(Date.parse(s));
+  if (/bool/.test(target)) return /^(t|f|true|false|0|1|y|n|yes|no)$/i.test(s);
+  return true;
+}
+function colTypeMatchesTarget(colType, target) {
+  const t = String(colType).toLowerCase();
+  if (/int/.test(target)) return /int/.test(t);
+  if (/numeric|decimal|double|real|money|float/.test(target)) return /numeric|decimal|double|real|money|float/.test(t);
+  if (/date|time/.test(target)) return /date|time/.test(t);
+  if (/bool/.test(target)) return /bool/.test(t);
+  return t.includes(target);
+}
+
+/** หาคอลัมน์ที่เป็นสาเหตุจาก error + ค่าในแถว (rowByCol) + ชนิดคอลัมน์ปลายทาง (colTypes) */
+function extractField(err, rowByCol, colTypes) {
+  const msg = (err && err.message) || '';
+  const detail = (err && err.detail) || '';
+  // PostgreSQL: not-null violation มี .column
+  if (err && err.column && rowByCol && (err.column in rowByCol)) {
+    return { column: err.column, value: rowByCol[err.column] };
+  }
+  // MySQL: "... for column 'x'" หรือ "Column 'x' cannot be null"
+  let m = msg.match(/for column ['`"]?([A-Za-z0-9_]+)['`"]?/i) || msg.match(/Column ['`"]([A-Za-z0-9_]+)['`"] cannot be null/i);
+  if (m) return { column: m[1], value: rowByCol ? rowByCol[m[1]] : null };
+  // PostgreSQL detail: Key (col)=(value)
+  m = detail.match(/Key \(([^)]+)\)=\(([^)]*)\)/);
+  if (m) return { column: m[1], value: m[2] };
+  // PostgreSQL type error: "invalid input syntax for type numeric" — สแกนหาคอลัมน์ที่ค่าไม่ตรงชนิด
+  const tm = msg.match(/invalid input syntax for type (\w+)/i) || msg.match(/out of range for type (\w+)/i);
+  if (tm && colTypes && rowByCol) {
+    const target = tm[1].toLowerCase();
+    for (const col of Object.keys(rowByCol)) {
+      const ct = colTypes[col];
+      if (!ct || !colTypeMatchesTarget(ct, target)) continue;
+      const v = rowByCol[col];
+      if (v !== null && v !== undefined && v !== '' && !valueFitsType(v, target)) {
+        return { column: col, value: v };
+      }
+    }
+  }
+  return { column: null, value: null };
+}
+
+/** ตัวรวมกลุ่มเหตุผล + ฟิลด์ที่เกี่ยวข้อง (ใช้ร่วมกับทั้ง generic และ recipe) */
+function makeReasonGrouper() {
+  const map = new Map();
+  return {
+    add(msg, keyDisp, field) {
+      const k = msg === '__OK__' ? '__OK__' : reasonKey(msg);
+      const g = map.get(k) || { reason: msg, count: 0, fields: new Set(), samples: [] };
+      g.count++;
+      if (field && field.column) g.fields.add(field.column);
+      if (g.samples.length < 5) {
+        g.samples.push({ key: keyDisp, field: (field && field.column) || null, value: field ? field.value : null });
+      }
+      map.set(k, g);
+    },
+    finalize(okText) {
+      return [...map.values()].map(g => ({
+        reason: g.reason === '__OK__' ? okText : g.reason,
+        count: g.count,
+        fields: [...g.fields],
+        samples: g.samples
+      })).sort((a, b) => b.count - a.count);
+    }
+  };
+}
+
 async function diagnoseTable(srcCtx, tgtCtx, spec, from, to, limit) {
   limit = limit || 200;
   const plan = await planTable(srcCtx, tgtCtx, spec);
@@ -305,8 +385,15 @@ async function diagnoseTable(srcCtx, tgtCtx, spec, from, to, limit) {
   const cols = plan.columns;
   const colList = cols.map(srcEng.quote).join(', ');
   const keyIdx = plan.keyColumns.map(k => cols.indexOf(k)); // ตำแหน่งคีย์ในชุดคอลัมน์
-  const groups = new Map();
+  const grouper = makeReasonGrouper();
   let okInsert = 0;
+
+  // ชนิดข้อมูลคอลัมน์ปลายทาง (ไว้เดาฟิลด์ที่ผิดชนิด)
+  const colTypes = {};
+  try {
+    const t = await tgtCtx.eng.describeTable(tgtCtx.pool, plan.schema, plan.table);
+    t.columns.forEach(c => { colTypes[c.name] = c.type; });
+  } catch (e) {}
 
   const readSize = Math.max(50, Math.min(500, Math.floor(30000 / plan.keyColumns.length)));
   for (const batch of chunk(sample, readSize)) {
@@ -317,22 +404,19 @@ async function diagnoseTable(srcCtx, tgtCtx, spec, from, to, limit) {
       const sql = tgtEng.buildInsertPlain(plan.schema, plan.table, cols, 1, { overriding: plan.overriding });
       const disp = plan.keyColumns.map((k, i) => k + '=' + fmt(r[keyIdx[i]])).join(', ');
       const res = await tgtEng.diagnoseInsert(tgtCtx.pool, sql, r);
-      const key = res.ok ? '__OK__' : reasonKey(shortErr(res.error));
-      const g = groups.get(key) || { reason: res.ok ? '__OK__' : shortErr(res.error), count: 0, samples: [] };
-      g.count++; if (g.samples.length < 5) g.samples.push(disp);
-      groups.set(key, g);
-      if (res.ok) okInsert++;
+      if (res.ok) { okInsert++; grouper.add('__OK__', disp, null); }
+      else {
+        const rowByCol = {}; cols.forEach((c, i) => { rowByCol[c] = r[i]; });
+        grouper.add(shortErr(res.error), disp, extractField(res.error, rowByCol, colTypes));
+      }
     }
   }
 
-  const list = [...groups.values()].map(g => ({
-    reason: g.reason === '__OK__'
-      ? 'ลอง insert เดี่ยวได้ปกติ — แถวถูกข้ามตอนโอนเพราะชนคีย์ภายในชุดเดียวกัน หรือมี unique/PK อื่นในตารางปลายทาง'
-      : g.reason,
-    count: g.count, samples: g.samples
-  })).sort((a, b) => b.count - a.count);
-
+  const list = grouper.finalize('ลอง insert เดี่ยวได้ปกติ — แถวถูกข้ามตอนโอนเพราะชนคีย์ภายในชุดเดียวกัน หรือมี unique/PK อื่นในตารางปลายทาง');
   return { table: plan.table, stillMissing: missing.length, sampled: sample.length, okInsert, groups: list };
 }
 
-module.exports = { planTable, compareTable, transferTable, diagnoseTable, shortErr, buildKeyPredicate, keyOf };
+module.exports = {
+  planTable, compareTable, transferTable, diagnoseTable, shortErr, buildKeyPredicate, keyOf,
+  reasonKey, extractField, makeReasonGrouper
+};

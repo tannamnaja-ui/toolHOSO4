@@ -25,6 +25,11 @@ function qname(schema, table) {
 /** MySQL ใช้ ? ทุกตำแหน่ง (ลำดับใน params สำคัญ) */
 function ph() { return '?'; }
 
+/** map encoding -> mysql2 charset/collation (WIN874 = TIS-620 ภาษาไทย HOSxP) */
+function mysqlCharset(encoding) {
+  return String(encoding).toUpperCase() === 'WIN874' ? 'TIS620_THAI_CI' : 'UTF8MB4_UNICODE_CI';
+}
+
 function poolConfig(cfg, max) {
   return {
     host: cfg.host,
@@ -33,6 +38,7 @@ function poolConfig(cfg, max) {
     user: cfg.user,
     password: cfg.password,
     ssl: cfg.ssl ? { rejectUnauthorized: false } : undefined,
+    charset: mysqlCharset(cfg.encoding),   // ตั้ง charset ให้ตรงกับตารางปลายทาง (กันภาษาไทยเพี้ยน)
     connectionLimit: max || 6,
     waitForConnections: true,
     connectTimeout: 15000,

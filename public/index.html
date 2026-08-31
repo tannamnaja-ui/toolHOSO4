@@ -72,7 +72,16 @@
             </div>
           </div>
         </div>
-        <label class="checkbox"><input type="checkbox" id="src-ssl"> ใช้การเชื่อมต่อแบบ SSL</label>
+        <div class="field-row c2" style="align-items:center">
+          <div class="field" style="margin:0">
+            <label>Charset ภาษาไทย <span class="hint">— สำหรับ MySQL/HOSxP เก่า</span></label>
+            <select id="src-encoding">
+              <option value="">อัตโนมัติ (UTF-8)</option>
+              <option value="WIN874">WIN874 / TIS-620 (ไทย)</option>
+            </select>
+          </div>
+          <label class="checkbox" style="margin-top:22px"><input type="checkbox" id="src-ssl"> ใช้การเชื่อมต่อแบบ SSL</label>
+        </div>
 
         <div class="row" style="margin-top:18px">
           <button class="btn btn-soft" id="src-test">🔍 ทดสอบการเชื่อมต่อ</button>
@@ -136,7 +145,16 @@
             </div>
           </div>
         </div>
-        <label class="checkbox"><input type="checkbox" id="tgt-ssl"> ใช้การเชื่อมต่อแบบ SSL</label>
+        <div class="field-row c2" style="align-items:center">
+          <div class="field" style="margin:0">
+            <label>Charset ภาษาไทย <span class="hint">— สำหรับ MySQL/HOSxP เก่า</span></label>
+            <select id="tgt-encoding">
+              <option value="">อัตโนมัติ (UTF-8)</option>
+              <option value="WIN874">WIN874 / TIS-620 (ไทย)</option>
+            </select>
+          </div>
+          <label class="checkbox" style="margin-top:22px"><input type="checkbox" id="tgt-ssl"> ใช้การเชื่อมต่อแบบ SSL</label>
+        </div>
 
         <div class="row" style="margin-top:18px">
           <button class="btn btn-soft" id="tgt-test">🔍 ทดสอบการเชื่อมต่อ</button>

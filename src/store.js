@@ -63,13 +63,19 @@ function writeJson(file, data) {
 }
 
 /* ---------- Connections ---------- */
-const EMPTY_CONN = { engine: 'postgres', host: '', port: 5432, database: '', user: '', password: '', ssl: false, label: '' };
+const EMPTY_CONN = { engine: 'postgres', host: '', port: 5432, database: '', user: '', password: '', ssl: false, label: '', encoding: '' };
 const VALID_ENGINES = new Set(['postgres', 'mysql']);
 function normEngine(e) {
   e = String(e || '').toLowerCase();
   if (e === 'postgresql' || e === 'pg' || e === 'postgre') e = 'postgres';
   if (e === 'mariadb' || e === 'maria') e = 'mysql';
   return VALID_ENGINES.has(e) ? e : 'postgres';
+}
+/** encoding ภาษาไทย: '' = อัตโนมัติ (UTF-8), 'WIN874' = TIS-620/CP874 (HOSxP เก่า) */
+function normEncoding(e) {
+  e = String(e || '').toLowerCase();
+  if (['win874', 'tis620', 'tis-620', 'cp874', 'windows-874'].includes(e)) return 'WIN874';
+  return '';
 }
 
 function getConnections({ withPassword = false } = {}) {
@@ -78,6 +84,7 @@ function getConnections({ withPassword = false } = {}) {
   for (const side of ['source', 'target']) {
     const c = Object.assign({ ...EMPTY_CONN }, raw[side] || {});
     c.engine = normEngine(c.engine);
+    c.encoding = normEncoding(c.encoding);
     c.password = withPassword ? decrypt(c.password) : (c.password ? '********' : '');
     out[side] = c;
   }
@@ -104,6 +111,7 @@ function saveConnections(payload) {
       database: (incoming.database || '').trim(),
       user: (incoming.user || '').trim(),
       ssl: !!incoming.ssl,
+      encoding: normEncoding(incoming.encoding !== undefined ? incoming.encoding : prev.encoding),
       password: prev.password || ''
     };
     // ถ้าไม่ได้ส่งรหัสผ่านมา (หรือส่งเป็น mask) ให้คงรหัสผ่านเดิมไว้

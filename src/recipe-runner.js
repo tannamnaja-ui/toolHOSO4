@@ -10,7 +10,7 @@
    ============================================================ */
 
 const crypto = require('crypto');
-const { buildKeyPredicate } = require('./transfer');
+const { buildKeyPredicate, extractField, makeReasonGrouper } = require('./transfer');
 
 const MAX_PARAMS = 30000;
 
@@ -128,6 +128,13 @@ async function getMaxColumn(tgtCtx, schema, table, column) {
   return Number(r.rows[0].m) || 0;
 }
 
+/** ทำความสะอาดข้อความ: ตัด NUL (0x00) และ control char ตกค้าง (คง tab/LF/CR)
+ *  แก้ปัญหาแถวจากข้อมูลเก่า/WIN874 ที่มีอักขระควบคุม ทำให้ insert ล้มเหลวทั้งแถว */
+const CTRL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+function cleanText(v) {
+  return (typeof v === "string") ? v.replace(CTRL_RE, "") : v;
+}
+
 /** แปลงค่าให้เป็นตัวเลข — ว่าง/ไม่ใช่ตัวเลข → null (สำหรับคอลัมน์ numeric/int) */
 function coerceNumeric(v) {
   if (v === null || v === undefined) return null;
@@ -143,7 +150,7 @@ function coerceNumeric(v) {
 function valueFor(row, c, maps, unmatched, rowCtx) {
   const v = rawValueFor(row, c, maps, unmatched, rowCtx);
   if (c.numeric) return coerceNumeric(v);   // คอลัมน์ตัวเลข: ค่าว่าง/ไม่ใช่ตัวเลข → NULL
-  return v;
+  return cleanText(v);                       // ข้อความ: ตัดอักขระควบคุมที่ทำให้ insert ล้มเหลว
 }
 
 function rawValueFor(row, c, maps, unmatched, rowCtx) {
@@ -405,24 +412,8 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
 }
 
 /* ============================================================
-   วินิจฉัยแถวที่ "ขาดหาย" แต่ไม่ถูกโอน (หาเหตุผล)
+   วินิจฉัยแถวที่ "ขาดหาย" แต่ไม่ถูกโอน (หาเหตุผล + ฟิลด์)
    ============================================================ */
-function reasonKey(msg) {
-  return String(msg)
-    .replace(/\([^)]*\)=\([^)]*\)/g, '(…)=(…)')  // pg detail: (col)=(value)
-    .replace(/'[^']*'/g, "'…'")
-    .replace(/"[^"]*"/g, '"…"')
-    .replace(/\d+/g, 'N')
-    .slice(0, 200);
-}
-function addReason(map, msg, sampleKey) {
-  const k = reasonKey(msg);
-  const g = map.get(k) || { reason: msg, count: 0, samples: [] };
-  g.count++;
-  if (g.samples.length < 5) g.samples.push(sampleKey);
-  map.set(k, g);
-}
-
 async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
   limit = limit || 200;
   const keyFields = keyFieldsOf(recipe);
@@ -448,8 +439,15 @@ async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
   }
   const cols = recipe.columns.map(c => c.col);
   const tgtEng = tgtCtx.eng;
-  const groups = new Map();
+  const grouper = makeReasonGrouper();
   let okInsert = 0;
+
+  // ชนิดข้อมูลคอลัมน์ปลายทาง (ไว้เดาฟิลด์ที่ผิดชนิด)
+  const colTypes = {};
+  try {
+    const t = await tgtCtx.eng.describeTable(tgtCtx.pool, recipe.schema || 'public', recipe.table);
+    t.columns.forEach(c => { colTypes[c.name] = c.type; });
+  } catch (e) {}
 
   for (let i = 0; i < sample.length; i++) {
     const row = sample[i];
@@ -457,22 +455,15 @@ async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
     const sql = tgtEng.buildInsertPlain(recipe.schema || 'public', recipe.table, cols, 1, { overriding: false });
     const disp = keyFields.map(f => f + '=' + fmt(row[f])).join(', ');
     const res = await tgtEng.diagnoseInsert(tgtCtx.pool, sql, vals);
-    if (res.ok) { okInsert++; addReason(groups, '__OK__', disp); }
-    else addReason(groups, shortErr(res.error), disp);
+    if (res.ok) { okInsert++; grouper.add('__OK__', disp, null); }
+    else {
+      const rowByCol = {}; cols.forEach((c, idx) => { rowByCol[c] = vals[idx]; });
+      grouper.add(shortErr(res.error), disp, extractField(res.error, rowByCol, colTypes));
+    }
   }
 
-  return finalizeDiagnose(recipe.table, stillMissing.length, sample.length, okInsert, groups);
+  const list = grouper.finalize('ลอง insert เดี่ยวได้ปกติ — แถวถูกข้ามตอนโอนเพราะชนคีย์ภายในชุดเดียวกัน หรือคีย์จริงของตารางปลายทางต่างจากคีย์ที่ใช้ตรวจ (เช่น มี unique อื่น)');
+  return { table: recipe.table, stillMissing: stillMissing.length, sampled: sample.length, okInsert, groups: list };
 }
 
-function finalizeDiagnose(table, stillMissing, sampled, okInsert, groups) {
-  const list = [...groups.values()].map(g => ({
-    reason: g.reason === '__OK__'
-      ? 'ลอง insert เดี่ยวได้ปกติ — แถวถูกข้ามตอนโอนเพราะชนคีย์ภายในชุดเดียวกัน หรือคีย์จริงของตารางปลายทางต่างจากคีย์ที่ใช้ตรวจ (เช่น มี unique อื่น)'
-      : g.reason,
-    count: g.count,
-    samples: g.samples
-  })).sort((a, b) => b.count - a.count);
-  return { table, stillMissing, sampled, okInsert, groups: list };
-}
-
-module.exports = { planRecipe, transferRecipe, diagnoseRecipe, reasonKey, addReason, finalizeDiagnose };
+module.exports = { planRecipe, transferRecipe, diagnoseRecipe };

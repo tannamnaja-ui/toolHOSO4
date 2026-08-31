@@ -299,14 +299,36 @@ function showDiagnoseModal(tableName, d) {
       body.push(el('div', { class: 'alert alert-ok' }, ['ไม่พบแถวที่ยังขาด — ข้อมูลถูกโอนครบแล้ว ✓']));
     } else {
       groups.forEach((g, i) => {
+        const fields = g.fields || [];
+        const trunc = v => {
+          if (v === null || v === undefined) return 'NULL';
+          const s = String(v);
+          return s.length > 40 ? s.slice(0, 40) + '…' : (s === '' ? "'' (ว่าง)" : s);
+        };
         body.push(el('div', { class: 'card', style: 'margin:0 0 12px' }, [
           el('div', { class: 'card-body', style: 'padding:14px 16px' }, [
-            el('div', { style: 'display:flex;gap:10px;align-items:baseline;margin-bottom:6px' }, [
+            el('div', { style: 'display:flex;gap:10px;align-items:baseline;margin-bottom:6px;flex-wrap:wrap' }, [
               el('span', { class: 'badge badge-sun' }, ['พบ ' + nf(g.count) + ' แถว']),
               el('span', { style: 'font-weight:700;color:var(--plum)' }, ['เหตุผลที่ ' + (i + 1)])
             ]),
+            fields.length
+              ? el('div', { style: 'margin-bottom:8px' }, [
+                  el('span', { class: 'small', style: 'color:var(--plum);font-weight:600;margin-right:6px' }, ['ฟิลด์ที่เป็นสาเหตุ:']),
+                  el('span', { class: 'chips', style: 'display:inline-flex' }, fields.map(f => el('span', { class: 'chip', style: 'background:#ffe3e8;color:var(--danger-dark);border-color:#f8c6cf' }, [f])))
+                ])
+              : null,
             el('div', { class: 'mono small', style: 'color:var(--danger-dark);white-space:pre-wrap;word-break:break-word;margin-bottom:8px' }, [g.reason]),
-            el('div', { class: 'small muted' }, ['ตัวอย่างคีย์: ' + (g.samples || []).join('  ·  ')])
+            el('div', { class: 'small muted' }, ['ตัวอย่าง:']),
+            el('div', { class: 'table-wrap', style: 'margin-top:4px' }, [
+              el('table', { class: 'data' }, [
+                el('thead', {}, [el('tr', {}, [el('th', {}, ['คีย์']), el('th', {}, ['ฟิลด์']), el('th', {}, ['ค่าในฟิลด์'])])]),
+                el('tbody', {}, (g.samples || []).map(s => el('tr', {}, [
+                  el('td', { class: 'mono small' }, [typeof s === 'string' ? s : (s.key || '')]),
+                  el('td', { class: 'small' }, [(s && s.field) ? el('span', { class: 'badge badge-danger' }, [s.field]) : el('span', { class: 'muted' }, ['–'])]),
+                  el('td', { class: 'mono small' }, [(s && s.field) ? trunc(s.value) : '–'])
+                ])))
+              ])
+            ])
           ])
         ]));
       });

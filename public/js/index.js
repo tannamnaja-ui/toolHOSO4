@@ -5,7 +5,7 @@ renderTopbar('home');
 
 const SIDES = ['src', 'tgt'];
 const SIDE_KEY = { src: 'source', tgt: 'target' };
-const FIELDS = ['engine', 'label', 'host', 'port', 'database', 'user', 'password'];
+const FIELDS = ['engine', 'label', 'host', 'port', 'database', 'user', 'password', 'encoding'];
 const DEFAULT_PORT = { postgres: 5432, mysql: 3306 };
 
 function readSide(prefix) {
