@@ -128,9 +128,25 @@ async function getMaxColumn(tgtCtx, schema, table, column) {
   return Number(r.rows[0].m) || 0;
 }
 
+/** แปลงค่าให้เป็นตัวเลข — ว่าง/ไม่ใช่ตัวเลข → null (สำหรับคอลัมน์ numeric/int) */
+function coerceNumeric(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const s = String(v).trim();
+  if (s === '') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** คำนวณค่าของคอลัมน์ปลายทางหนึ่งช่อง
  *  rowCtx = { index, seqBase } สำหรับคอลัมน์ที่รันเลขต่อจากค่าสูงสุด */
 function valueFor(row, c, maps, unmatched, rowCtx) {
+  const v = rawValueFor(row, c, maps, unmatched, rowCtx);
+  if (c.numeric) return coerceNumeric(v);   // คอลัมน์ตัวเลข: ค่าว่าง/ไม่ใช่ตัวเลข → NULL
+  return v;
+}
+
+function rawValueFor(row, c, maps, unmatched, rowCtx) {
   if (c.seqFromMax) return ((rowCtx && rowCtx.seqBase[c.col]) || 0) + ((rowCtx && rowCtx.index) || 0) + 1;
   if (c.gen) return genValue(c.gen);
   if (Object.prototype.hasOwnProperty.call(c, 'const')) return c.const;
@@ -259,9 +275,13 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
     srcEngine: srcCtx.eng.name, tgtEngine: tgtCtx.eng.name, warnings: []
   };
 
+  const timing = {};
+  const secSince = t => ((Date.now() - t) / 1000).toFixed(1);
+
   // 1) รันคิวรี่ต้นทาง
   emit({ type: 'stage', table: recipe.table, stage: 'รันคิวรี่ต้นทาง (สูตรเฉพาะ)...' });
   let rows;
+  const tQuery = Date.now();
   try {
     const q = recipe.source.sql(from, to);
     rows = (await srcCtx.eng.query(srcCtx.pool, q.text, q.params)).rows;
@@ -270,7 +290,9 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
     result.error = 'คิวรี่ต้นทางล้มเหลว: ' + shortErr(e);
     return result;
   }
+  timing.queryMs = Date.now() - tQuery;
   result.sourceRows = rows.length;
+  emit({ type: 'stage', table: recipe.table, stage: 'รันคิวรี่ต้นทางเสร็จใน ' + secSince(tQuery) + ' วินาที (' + rows.length.toLocaleString() + ' แถว)' });
 
   // dedupe ตามคีย์ (เดี่ยว/หลายคอลัมน์) — เก็บแถวแรก, ข้ามแถวที่คีย์หลัก (ตัวแรก) ว่าง
   const keyFields = keyFieldsOf(recipe);
@@ -294,9 +316,12 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
 
   // 2) หาแถวที่ปลายทางยังไม่มี (ตามคีย์)
   emit({ type: 'stage', table: recipe.table, stage: 'ตรวจหาคีย์ที่ขาดในปลายทาง...' });
+  const tCheck = Date.now();
   const missingRows = await findMissingRows(tgtCtx, recipe, uniq,
     p => emit(Object.assign({ type: 'progress', table: recipe.table, phase: 'check' }, p)));
+  timing.checkMs = Date.now() - tCheck;
   result.missingRows = missingRows.length;
+  emit({ type: 'stage', table: recipe.table, stage: 'ตรวจคีย์ที่ขาดเสร็จใน ' + secSince(tCheck) + ' วินาที (ขาด ' + missingRows.length.toLocaleString() + ')' });
 
   if (!missingRows.length) {
     result.status = 'ok'; result.inserted = 0; result.failed = 0;
@@ -341,6 +366,7 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   const errors = [];
 
   emit({ type: 'stage', table: recipe.table, stage: 'กำลังโอน ' + missingRows.length.toLocaleString() + ' แถว...' });
+  const tInsert = Date.now();
 
   for (const batch of chunk(built, writeSize)) {
     if (options.isCancelled && options.isCancelled()) { result.cancelled = true; break; }
@@ -360,6 +386,8 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
     emit({ type: 'progress', table: recipe.table, phase: 'insert', inserted, failed, total: missingRows.length });
   }
 
+  timing.insertMs = Date.now() - tInsert;
+
   // สรุปค่าที่ lookup ไม่เจอ (เป็นคำเตือน)
   for (const [name, set] of Object.entries(unmatched)) {
     if (set.size) result.warnings.push('lookup "' + name + '" ไม่พบค่าที่ตรงกัน ' + set.size + ' รายการ (ใส่ NULL)');
@@ -369,6 +397,10 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   result.inserted = inserted;
   result.failed = failed;
   result.errors = errors;
+  result.timing = timing;
+  // สรุปเวลาแต่ละขั้น (คิวรี่ต้นทาง / ตรวจคีย์ / โอน)
+  emit({ type: 'stage', table: recipe.table,
+    stage: 'สรุปเวลา: คิวรี่ ' + (timing.queryMs / 1000).toFixed(1) + 'วิ · ตรวจคีย์ ' + (timing.checkMs / 1000).toFixed(1) + 'วิ · โอน ' + (timing.insertMs / 1000).toFixed(1) + 'วิ' });
   return result;
 }
 
