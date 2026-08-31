@@ -9,7 +9,21 @@
    ทำงานได้ทั้งปลายทาง PostgreSQL และ MySQL (ใช้ engine ของฝั่งนั้น)
    ============================================================ */
 
+const crypto = require('crypto');
+
 const MAX_PARAMS = 30000;
+
+/** สร้างค่าอัตโนมัติตามชนิดที่กำหนดในสูตร */
+function genValue(kind) {
+  switch (kind) {
+    case 'guid32':   // GUID 32 ตัว hex พิมพ์ใหญ่ ไม่มีขีด เช่น CA74543DCFC9C4063C4628D24539F0FA
+      return crypto.randomBytes(16).toString('hex').toUpperCase();
+    case 'guid':     // แบบมีขีด 8-4-4-4-12
+      return crypto.randomUUID().toUpperCase();
+    default:
+      return null;
+  }
+}
 
 function chunk(arr, size) {
   const out = [];
@@ -101,6 +115,7 @@ async function resolveAllMaps(tgtCtx, recipe, rows) {
 
 /** คำนวณค่าของคอลัมน์ปลายทางหนึ่งช่อง */
 function valueFor(row, c, maps, unmatched) {
+  if (c.gen) return genValue(c.gen);
   if (Object.prototype.hasOwnProperty.call(c, 'const')) return c.const;
   let v = row[c.field];
   if (c.lookup) {

@@ -170,14 +170,16 @@ module.exports = {
     { col: 'pttype',     field: 'pttype',   lookup: 'pttypeCode' },
     { col: 'pttypeno',   field: 'pttypeno' },
     { col: 'spclty',     field: 'spclty',   lookup: 'spcltyCode' },
-    { col: 'main_dep',   field: 'main_dep', lookup: 'depCode' },
-    { col: 'cur_dep',    field: 'cur_dep',  lookup: 'depCode' },
+    { col: 'main_dep',     field: 'main_dep', lookup: 'depCode' },
+    { col: 'cur_dep',      field: 'cur_dep',  lookup: 'depCode' },
+    { col: 'cur_dep_busy', const: 'N' },        // คงที่ 'N'
+    { col: 'cur_dep_time', field: 'vsttime' },  // = เวลารับบริการ
     { col: 'pt_subtype', field: 'pt_subtype' },
     { col: 'visit_type', field: 'visit_type' },
     // staff: doctor.oldcode -> doctor.code -> officer.officer_doctor_code -> officer.officer_login_name
     { col: 'staff',      field: 'staff',    lookupChain: ['doctorCode', 'officerLogin'] },
     { col: 'oldcode',    field: 'oldcode' },
-    { col: 'ovst_key',   field: 'ovst_key' },
+    { col: 'ovst_key',   gen: 'guid32' },   // สร้าง GUID 32 ตัว hex พิมพ์ใหญ่ ไม่ซ้ำ ต่อแถว
     { col: 'ovstost',    field: 'ovstost',  lookup: 'ovstostCode' },
     { col: 'ovstist',    field: 'ovstist',  lookup: 'ovstistCode' }
   ]
