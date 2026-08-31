@@ -1,0 +1,5 @@
+node_modules/
+config/connections.json
+config/.key
+*.log
+config/history.json

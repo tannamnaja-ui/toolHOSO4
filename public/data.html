@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>toolHOSO4 — โอนข้อมูล</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="container">
+  <h2 class="page-title" id="page-title">กำลังโหลด...</h2>
+  <p class="page-sub" id="page-sub">—</p>
+
+  <!-- ============ ช่วงวันที่ ============ -->
+  <div class="card">
+    <div class="card-head">
+      <span style="font-size:19px">📅</span>
+      <h2>เลือกช่วงวันที่</h2>
+      <span class="sub">ระบบจะเทียบข้อมูลเฉพาะแถวที่อยู่ในช่วงวันที่นี้</span>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="field" style="margin:0;min-width:180px">
+          <label>ตั้งแต่วันที่</label>
+          <input type="date" id="date-from">
+        </div>
+        <div class="field" style="margin:0;min-width:180px">
+          <label>ถึงวันที่</label>
+          <input type="date" id="date-to">
+        </div>
+        <div class="field" style="margin:0;flex:1 1 320px">
+          <label>เลือกเร็ว</label>
+          <div class="row" style="gap:7px">
+            <button class="btn btn-soft btn-sm" data-preset="today">วันนี้</button>
+            <button class="btn btn-soft btn-sm" data-preset="yesterday">เมื่อวาน</button>
+            <button class="btn btn-soft btn-sm" data-preset="7">7 วันล่าสุด</button>
+            <button class="btn btn-soft btn-sm" data-preset="30">30 วันล่าสุด</button>
+            <button class="btn btn-soft btn-sm" data-preset="month">เดือนนี้</button>
+            <button class="btn btn-soft btn-sm" data-preset="lastmonth">เดือนที่แล้ว</button>
+          </div>
+        </div>
+      </div>
+      <hr class="divider">
+      <label class="checkbox"><input type="checkbox" id="no-date">
+        ไม่กรองวันที่ — เทียบและโอน<b style="margin:0 4px">ทั้งตาราง</b>(เหมาะกับข้อมูลพื้นฐานที่ไม่มีคอลัมน์วันที่)
+      </label>
+    </div>
+  </div>
+
+  <!-- ============ ตาราง ============ -->
+  <div class="card">
+    <div class="card-head">
+      <span style="font-size:19px">📊</span>
+      <h2>เลือกตารางที่ต้องการโอน</h2>
+      <span class="badge badge-pink" id="pick-count">เลือก 0 ตาราง</span>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-soft btn-sm" id="btn-plan">🧬 ตรวจสอบโครงสร้าง</button>
+        <button class="btn btn-lav btn-sm" id="btn-manage">⚙️ จัดการรายการตาราง</button>
+      </div>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div class="table-wrap" style="border:none;border-radius:0;max-height:460px;overflow-y:auto">
+        <table class="data" id="tbl-tables">
+          <thead>
+            <tr>
+              <th style="width:42px"><input type="checkbox" id="check-all" style="width:17px;height:17px;accent-color:var(--rose)"></th>
+              <th>ตาราง</th>
+              <th>คำอธิบาย</th>
+              <th>คีย์ที่ใช้เทียบ</th>
+              <th>คอลัมน์วันที่</th>
+              <th style="width:150px">สถานะโครงสร้าง</th>
+            </tr>
+          </thead>
+          <tbody id="tables-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ปุ่มสั่งงาน ============ -->
+  <div class="sticky-actions">
+    <button class="btn btn-mint" id="btn-check">🔍 ตรวจสอบข้อมูลที่ขาด</button>
+    <button class="btn btn-primary" id="btn-transfer">🚀 เริ่มโอนข้อมูล</button>
+    <button class="btn btn-danger hidden" id="btn-cancel">✋ ยกเลิก</button>
+    <label class="checkbox" style="margin-left:8px"><input type="checkbox" id="sync-seq" checked> ปรับค่า sequence ปลายทางหลังโอน</label>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost btn-sm" id="btn-clear">🧹 ล้างผลลัพธ์</button>
+  </div>
+
+  <!-- ============ ผลลัพธ์ ============ -->
+  <div class="card hidden" id="run-card">
+    <div class="card-head">
+      <span style="font-size:19px">⏳</span>
+      <h2 id="run-title">ความคืบหน้า</h2>
+      <span class="badge badge-sun" id="run-badge" style="margin-left:auto">กำลังทำงาน</span>
+    </div>
+    <div class="card-body">
+      <div class="stats" id="run-stats"></div>
+      <div class="progress" style="margin-bottom:6px"><i id="run-bar"></i></div>
+      <div class="small muted" id="run-stage" style="margin-bottom:16px">—</div>
+      <div class="log" id="run-log"></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="result-card">
+    <div class="card-head">
+      <span style="font-size:19px">📈</span>
+      <h2>สรุปผลรายตาราง</h2>
+      <button class="btn btn-soft btn-sm" id="btn-export" style="margin-left:auto">⬇️ ดาวน์โหลด CSV</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div class="table-wrap" style="border:none;border-radius:0">
+        <table class="data" id="tbl-result">
+          <thead>
+            <tr>
+              <th>ตาราง</th>
+              <th class="num">ต้นทาง</th>
+              <th class="num">ปลายทาง</th>
+              <th class="num">ขาดหาย</th>
+              <th class="num">โอนสำเร็จ</th>
+              <th class="num">ล้มเหลว</th>
+              <th>สถานะ</th>
+              <th>หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody id="result-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/data.js"></script>
+</body>
+</html>

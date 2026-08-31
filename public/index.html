@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>toolHOSO4 — ตั้งค่าการเชื่อมต่อฐานข้อมูล</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="container">
+  <h2 class="page-title">🔗 ตั้งค่าการเชื่อมต่อฐานข้อมูล</h2>
+  <p class="page-sub">กำหนดฐานข้อมูลต้นทาง (Source) และปลายทาง (Target) — ระบบจะจดจำค่าที่บันทึกไว้ให้อัตโนมัติ</p>
+
+  <div class="grid-2">
+
+    <!-- ============ SOURCE ============ -->
+    <div class="card source">
+      <div class="card-head">
+        <span style="font-size:20px">📤</span>
+        <div>
+          <h2>ฐานข้อมูลต้นทาง (Source)</h2>
+          <div class="sub">ฐานข้อมูลที่ใช้อ่านข้อมูลออกไป</div>
+        </div>
+        <span class="badge badge-mint" id="src-engine-tag" style="margin-left:auto">🐘 PostgreSQL</span>
+        <span class="badge badge-gray" id="src-status">
+          <span class="dot off"></span> ยังไม่ทดสอบ
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="field-row c2">
+          <div class="field">
+            <label>ชนิดฐานข้อมูล <span style="color:var(--rose)">*</span></label>
+            <select id="src-engine">
+              <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL / MariaDB</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>ชื่อเรียก (Label) <span class="hint">— ไม่บังคับ</span></label>
+            <input type="text" id="src-label" placeholder="เช่น HOSxP รพ.หลัก">
+          </div>
+        </div>
+        <div class="field-row c2">
+          <div class="field">
+            <label>IP Server <span style="color:var(--rose)">*</span></label>
+            <input type="text" id="src-host" placeholder="192.168.1.10 หรือ localhost" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Port <span style="color:var(--rose)">*</span></label>
+            <input type="number" id="src-port" value="5432" min="1" max="65535">
+          </div>
+        </div>
+        <div class="field">
+          <label>Database <span style="color:var(--rose)">*</span></label>
+          <input type="text" id="src-database" placeholder="ชื่อฐานข้อมูล" autocomplete="off">
+        </div>
+        <div class="field-row c2">
+          <div class="field">
+            <label>Username <span style="color:var(--rose)">*</span></label>
+            <input type="text" id="src-user" placeholder="postgres" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <div class="pwd-wrap">
+              <input type="password" id="src-password" placeholder="••••••••" autocomplete="new-password">
+              <button type="button" class="pwd-toggle" data-target="src-password">👁️</button>
+            </div>
+          </div>
+        </div>
+        <label class="checkbox"><input type="checkbox" id="src-ssl"> ใช้การเชื่อมต่อแบบ SSL</label>
+
+        <div class="row" style="margin-top:18px">
+          <button class="btn btn-soft" id="src-test">🔍 ทดสอบการเชื่อมต่อ</button>
+          <button class="btn btn-ghost btn-sm" id="src-copy" title="คัดลอกค่าไปฝั่งปลายทาง">➡️ คัดลอกไปปลายทาง</button>
+        </div>
+        <div class="alert hidden" id="src-alert"></div>
+      </div>
+    </div>
+
+    <!-- ============ TARGET ============ -->
+    <div class="card target">
+      <div class="card-head">
+        <span style="font-size:20px">📥</span>
+        <div>
+          <h2>ฐานข้อมูลปลายทาง (Target)</h2>
+          <div class="sub">ฐานข้อมูลที่จะนำเข้าข้อมูล</div>
+        </div>
+        <span class="badge badge-mint" id="tgt-engine-tag" style="margin-left:auto">🐘 PostgreSQL</span>
+        <span class="badge badge-gray" id="tgt-status">
+          <span class="dot off"></span> ยังไม่ทดสอบ
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="field-row c2">
+          <div class="field">
+            <label>ชนิดฐานข้อมูล <span style="color:var(--rose)">*</span></label>
+            <select id="tgt-engine">
+              <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL / MariaDB</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>ชื่อเรียก (Label) <span class="hint">— ไม่บังคับ</span></label>
+            <input type="text" id="tgt-label" placeholder="เช่น ศูนย์ข้อมูล / ฐานข้อมูลสำรอง">
+          </div>
+        </div>
+        <div class="field-row c2">
+          <div class="field">
+            <label>IP Server <span style="color:var(--rose)">*</span></label>
+            <input type="text" id="tgt-host" placeholder="192.168.1.20 หรือ localhost" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Port <span style="color:var(--rose)">*</span></label>
+            <input type="number" id="tgt-port" value="5432" min="1" max="65535">
+          </div>
+        </div>
+        <div class="field">
+          <label>Database <span style="color:var(--rose)">*</span></label>
+          <input type="text" id="tgt-database" placeholder="ชื่อฐานข้อมูล" autocomplete="off">
+        </div>
+        <div class="field-row c2">
+          <div class="field">
+            <label>Username <span style="color:var(--rose)">*</span></label>
+            <input type="text" id="tgt-user" placeholder="postgres" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <div class="pwd-wrap">
+              <input type="password" id="tgt-password" placeholder="••••••••" autocomplete="new-password">
+              <button type="button" class="pwd-toggle" data-target="tgt-password">👁️</button>
+            </div>
+          </div>
+        </div>
+        <label class="checkbox"><input type="checkbox" id="tgt-ssl"> ใช้การเชื่อมต่อแบบ SSL</label>
+
+        <div class="row" style="margin-top:18px">
+          <button class="btn btn-soft" id="tgt-test">🔍 ทดสอบการเชื่อมต่อ</button>
+        </div>
+        <div class="alert hidden" id="tgt-alert"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ SAVE BAR ============ -->
+  <div class="card" style="margin-top:4px">
+    <div class="card-body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1 1 320px">
+        <div style="font-weight:700;color:var(--plum)">บันทึกการเชื่อมต่อ</div>
+        <div class="small muted">ค่าที่บันทึกจะถูกเก็บไว้ในเครื่องนี้ (รหัสผ่านเข้ารหัสด้วย AES-256-GCM) และจะถูกเรียกใช้อัตโนมัติทุกครั้งที่เปิดโปรแกรม</div>
+      </div>
+      <button class="btn btn-soft" id="btn-test-both">🔍 ทดสอบทั้ง 2 ฝั่ง</button>
+      <button class="btn btn-primary" id="btn-save">💾 บันทึกการเชื่อมต่อ</button>
+    </div>
+  </div>
+
+  <!-- ============ MENU SHORTCUTS ============ -->
+  <h2 class="page-title" style="font-size:19px;margin-top:30px">เมนูการโอนข้อมูล</h2>
+  <p class="page-sub">เลือกกลุ่มข้อมูลที่ต้องการโอน — แต่ละกลุ่มกำหนดรายการตารางได้เอง</p>
+  <div class="grid-2" id="menu-cards" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))"></div>
+
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/index.js"></script>
+</body>
+</html>
