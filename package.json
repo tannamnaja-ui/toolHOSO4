@@ -1,6 +1,6 @@
 {
   "name": "toolhoso4",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "ระบบโอนข้อมูลระหว่างฐานข้อมูล (Source -> Target) รองรับ PostgreSQL และ MySQL ตามวันที่และตารางที่เลือก",
   "author": "tannamnaja-ui",
   "main": "electron/main.js",
