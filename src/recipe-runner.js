@@ -66,9 +66,10 @@ async function resolveExplodeLookup(tgtCtx, def, values) {
     const conds = [];
     const paramsArr = [];
     for (const id of batch) {
-      // (delim||oldcode||delim) LIKE (%delim + id + delim%) — ใช้ CONCAT ได้ทั้ง PG/MySQL
-      conds.push("CONCAT('" + delim + "', " + oc + ", '" + delim + "') LIKE CONCAT('%" + delim + "', " + eng.ph(p++) + ", '" + delim + "%')");
-      paramsArr.push(id);
+      // (delim||oldcode||delim) LIKE '%delim+id+delim%' — สร้าง pattern ใน JS ส่งเป็น param ตรง ๆ
+      // (กัน PG error "could not determine data type of parameter" เมื่อ param อยู่ใน CONCAT)
+      conds.push("CONCAT('" + delim + "', " + oc + ", '" + delim + "') LIKE " + eng.ph(p++));
+      paramsArr.push('%' + delim + id + delim + '%');
     }
     const sql = 'select ' + oc + ' as k, ' + rc + ' as v from ' + table + ' where ' + conds.join(' OR ');
     const r = await eng.query(tgtCtx.pool, sql, paramsArr);
