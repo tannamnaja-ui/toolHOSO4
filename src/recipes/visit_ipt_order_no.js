@@ -24,13 +24,14 @@ SELECT
     ip.order_type AS order_type,
     min(ip.order_staff_order) AS entry_staff,
     ip.t_visit_id AS ward,
-    min(ip.order_time) AS rxtime,
+    TO_CHAR(ip.order_time, 'HH24:MI:SS') AS rxtime,
     count(ip.t_order_id) AS item_count,
     sum(ip.sum_price) AS amount,
     ip.t_visit_id AS hos_guid,
     min(ip.order_staff_order) AS doctor_code,
-    TO_CHAR(ip.order_date + min(ip.order_time), 'YYYY-MM-DD HH24:MI:SS') AS update_datetime,
-    ip.t_order_id AS oldcode
+    TO_CHAR(ip.order_date + ip.order_time, 'YYYY-MM-DD HH24:MI:SS') AS update_datetime,
+    -- รวม t_order_id เป็น list (ORDER BY ให้ค่าคงที่ทุกครั้ง เพื่อใช้เป็นคีย์เช็กซ้ำได้)
+    string_agg(ip.t_order_id, ',' ORDER BY ip.t_order_id) AS oldcode
 FROM (
     SELECT
         o.t_visit_id,
@@ -60,7 +61,7 @@ GROUP BY
     ip.an,
     ip.order_type,
     ip.order_date,
-    ip.t_order_id`;
+    ip.order_time`;
 
   return { text, params };
 }
