@@ -222,8 +222,9 @@ app.post('/api/run', wrap(async (req, res) => {
     cancelled: job.cancelled,
     results
   };
-  pushHistory(summary);
+  // ส่ง done ก่อน แล้วค่อยบันทึกประวัติ — กันกรณี pushHistory error ทำให้ frontend ไม่ได้รับ done (สถานะค้าง)
   send({ type: 'done', summary });
+  try { pushHistory(summary); } catch (e) { console.error('[history]', e.message); }
   jobs.delete(jobId);
   res.end();
 }));

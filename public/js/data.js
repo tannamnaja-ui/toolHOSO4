@@ -472,6 +472,14 @@ async function run(dryRun) {
   } finally {
     state.running = false;
     $('#btn-cancel').classList.add('hidden');
+    // safety net: ถ้าสตรีมจบแล้วแต่ badge ยังค้าง "กำลังทำงาน" (ไม่ได้รับ done) ให้สรุปสถานะจากผลที่มี
+    if ($('#run-badge').textContent === 'กำลังทำงาน') {
+      const bad = agg.failed > 0;
+      $('#run-badge').className = 'badge ' + (bad ? 'badge-sun' : 'badge-mint');
+      $('#run-badge').textContent = bad ? 'เสร็จสิ้น (มีข้อผิดพลาด)' : 'เสร็จสมบูรณ์';
+      $('#run-bar').style.width = '100%';
+      $('#run-stage').textContent = 'เสร็จสิ้น';
+    }
     updatePickCount();
   }
 }
