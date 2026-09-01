@@ -57,29 +57,20 @@ async function resolveExplodeLookup(tgtCtx, def, values) {
   const eng = tgtCtx.eng;
   const map = new Map();
   const delim = def.explode;
-  const distinct = [...new Set(values.map(keyStr).filter(v => v !== ''))];
-  if (!distinct.length) return map;
+  const wanted = new Set(values.map(keyStr).filter(v => v !== ''));
+  if (!wanted.size) return map;
   const table = eng.qname(def.schema || 'public', def.table);
   const oc = eng.quote(def.match), rc = eng.quote(def.ret);
-  for (const batch of chunk(distinct, 300)) {
-    let p = 1;
-    const conds = [];
-    const paramsArr = [];
-    for (const id of batch) {
-      // (delim||oldcode||delim) LIKE '%delim+id+delim%' — สร้าง pattern ใน JS ส่งเป็น param ตรง ๆ
-      // (กัน PG error "could not determine data type of parameter" เมื่อ param อยู่ใน CONCAT)
-      conds.push("CONCAT('" + delim + "', " + oc + ", '" + delim + "') LIKE " + eng.ph(p++));
-      paramsArr.push('%' + delim + id + delim + '%');
-    }
-    const sql = 'select ' + oc + ' as k, ' + rc + ' as v from ' + table + ' where ' + conds.join(' OR ');
-    const r = await eng.query(tgtCtx.pool, sql, paramsArr);
-    const batchSet = new Set(batch.map(keyStr));
-    for (const row of r.rows) {
-      const list = String(row.k == null ? '' : row.k).split(delim);
-      for (const tok of list) {
-        const t = tok.trim();
-        if (t && batchSet.has(t) && !map.has(t)) map.set(t, row.v);
-      }
+  // ดึง (list, ret) ทั้งตารางครั้งเดียว แล้ว explode สร้าง map token->ret ใน JS
+  // (เร็วกว่าไล่ LIKE ต่อ id มาก เพราะ LIKE ใช้ index ไม่ได้ = scan ทั้งตารางทุกครั้ง)
+  const r = await eng.query(tgtCtx.pool,
+    'select ' + oc + ' as k, ' + rc + ' as v from ' + table + ' where ' + oc + ' is not null', []);
+  for (const row of r.rows) {
+    if (row.k == null) continue;
+    const list = String(row.k).split(delim);
+    for (const tok of list) {
+      const t = tok.trim();
+      if (t && wanted.has(t) && !map.has(t)) map.set(t, row.v);
     }
   }
   return map;
