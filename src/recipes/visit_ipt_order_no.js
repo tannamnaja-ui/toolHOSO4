@@ -30,7 +30,7 @@ SELECT
     ip.t_visit_id AS hos_guid,
     min(ip.order_staff_order) AS doctor_code,
     TO_CHAR(ip.order_date + min(ip.order_time), 'YYYY-MM-DD HH24:MI:SS') AS update_datetime,
-    string_agg(ip.t_order_id, ',') AS oldcode
+    ip.t_order_id AS oldcode
 FROM (
     SELECT
         o.t_visit_id,
@@ -59,7 +59,8 @@ GROUP BY
     ip.t_visit_id,
     ip.an,
     ip.order_type,
-    ip.order_date`;
+    ip.order_date,
+    ip.t_order_id`;
 
   return { text, params };
 }
@@ -71,8 +72,8 @@ module.exports = {
   schema: 'public',
   dateColumn: 'rxdate',
   targetDateColumn: 'rxdate',
-  targetKey: ['hos_guid'],   // ผู้ใช้เลือกเช็กซ้ำด้วย hos_guid อย่างเดียว
-  keyField: 'hos_guid',
+  targetKey: ['oldcode'],   // grain เป็น 1 แถวต่อ 1 order -> ใช้ oldcode (t_order_id) เป็นคีย์เช็กซ้ำ (unique/เสถียร)
+  keyField: 'oldcode',
 
   source: { engine: 'postgres', sql: sourceSql },
 
