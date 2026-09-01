@@ -51,8 +51,42 @@ function fmt(v) {
   return String(v);
 }
 
+/* ---------- lookup แบบ explode: คอลัมน์ match เป็น list (คั่นด้วย delimiter)
+   สร้าง map token -> ret เช่น ipt_order_no.oldcode = '12,15,20' -> {12:order_no,15:...} ---------- */
+async function resolveExplodeLookup(tgtCtx, def, values) {
+  const eng = tgtCtx.eng;
+  const map = new Map();
+  const delim = def.explode;
+  const distinct = [...new Set(values.map(keyStr).filter(v => v !== ''))];
+  if (!distinct.length) return map;
+  const table = eng.qname(def.schema || 'public', def.table);
+  const oc = eng.quote(def.match), rc = eng.quote(def.ret);
+  for (const batch of chunk(distinct, 300)) {
+    let p = 1;
+    const conds = [];
+    const paramsArr = [];
+    for (const id of batch) {
+      // (delim||oldcode||delim) LIKE (%delim + id + delim%) — ใช้ CONCAT ได้ทั้ง PG/MySQL
+      conds.push("CONCAT('" + delim + "', " + oc + ", '" + delim + "') LIKE CONCAT('%" + delim + "', " + eng.ph(p++) + ", '" + delim + "%')");
+      paramsArr.push(id);
+    }
+    const sql = 'select ' + oc + ' as k, ' + rc + ' as v from ' + table + ' where ' + conds.join(' OR ');
+    const r = await eng.query(tgtCtx.pool, sql, paramsArr);
+    const batchSet = new Set(batch.map(keyStr));
+    for (const row of r.rows) {
+      const list = String(row.k == null ? '' : row.k).split(delim);
+      for (const tok of list) {
+        const t = tok.trim();
+        if (t && batchSet.has(t) && !map.has(t)) map.set(t, row.v);
+      }
+    }
+  }
+  return map;
+}
+
 /* ---------- lookup: match -> ret จากตารางอ้างอิงปลายทาง ---------- */
 async function resolveLookup(tgtCtx, def, values) {
+  if (def.explode) return resolveExplodeLookup(tgtCtx, def, values);
   const eng = tgtCtx.eng;
   const map = new Map();
   const distinct = [...new Set(values.map(keyStr).filter(v => v !== ''))];
