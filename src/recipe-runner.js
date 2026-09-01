@@ -151,8 +151,13 @@ function coerceNumeric(v) {
  *  rowCtx = { index, seqBase } สำหรับคอลัมน์ที่รันเลขต่อจากค่าสูงสุด */
 function valueFor(row, c, maps, unmatched, rowCtx) {
   const v = rawValueFor(row, c, maps, unmatched, rowCtx);
-  if (c.numeric) return coerceNumeric(v);   // คอลัมน์ตัวเลข: ค่าว่าง/ไม่ใช่ตัวเลข → NULL
-  return cleanText(v);                       // ข้อความ: ตัดอักขระควบคุมที่ทำให้ insert ล้มเหลว
+  let out = c.numeric ? coerceNumeric(v) : cleanText(v);   // ตัวเลข -> null ถ้าว่าง / ข้อความ -> ตัด control char
+  // ค่าว่าง/null (รวมช่องว่างล้วน) -> ใช้ค่าเริ่มต้น (ถ้ากำหนด defaultIfEmpty)
+  if (Object.prototype.hasOwnProperty.call(c, 'defaultIfEmpty')) {
+    const empty = out === null || out === undefined || (typeof out === 'string' && out.trim() === '');
+    if (empty) out = c.defaultIfEmpty;
+  }
+  return out;
 }
 
 function rawValueFor(row, c, maps, unmatched, rowCtx) {

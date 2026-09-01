@@ -113,7 +113,7 @@ module.exports = {
   columns: [
     { col: 'oapp_id',         seqFromMax: true },   // รันเลขต่อจาก MAX ในปลายทาง
     { col: 'hn',              field: 'hn' },
-    { col: 'vn',              field: 'vn' },
+    { col: 'vn',              field: 'vn', defaultIfEmpty: '0' },   // vn ว่าง -> 0
     { col: 'vstdate',         field: 'vstdate' },
     { col: 'nextdate',        field: 'nextdate' },
     { col: 'nexttime',        field: 'nexttime' },
