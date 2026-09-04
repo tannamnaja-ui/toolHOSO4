@@ -82,14 +82,28 @@ app.get('/api/db/:side/describe', wrap(async (req, res) => {
 
 /* ------------------------- Table groups ------------------------- */
 
+/** เพิ่มตารางที่มีสูตร (recipe) เข้าไปในกลุ่มเสมอ ถ้ายังไม่มีใน config
+ *  (กันปัญหา config เดิมจากตัวติดตั้งรุ่นก่อนไม่มีตารางใหม่ เช่น patient) */
+function withRecipeTables(group) {
+  const recs = listRecipes().filter(r => r.group === group.key);
+  const have = new Set((group.tables || []).map(t => t.table));
+  const extra = recs.filter(r => !have.has(r.table)).map(r => ({
+    table: r.table, schema: 'public', label: r.label || r.table,
+    keyColumns: [], dateColumn: r.dateColumn || '', enabled: true
+  }));
+  return Object.assign({}, group, { tables: [...(group.tables || []), ...extra] });
+}
+
 app.get('/api/groups', wrap(async (req, res) => {
-  res.json({ ok: true, groups: store.getGroups() });
+  const groups = store.getGroups();
+  for (const k of Object.keys(groups)) groups[k] = withRecipeTables(groups[k]);
+  res.json({ ok: true, groups });
 }));
 
 app.get('/api/groups/:key', wrap(async (req, res) => {
   const g = store.getGroup(req.params.key);
   if (!g) throw new Error('ไม่พบกลุ่มข้อมูล');
-  res.json({ ok: true, group: g });
+  res.json({ ok: true, group: withRecipeTables(g) });
 }));
 
 app.post('/api/groups/:key/tables', wrap(async (req, res) => {
