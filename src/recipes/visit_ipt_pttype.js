@@ -93,7 +93,6 @@ module.exports = {
     { col: 'expire_date',   field: 'expiredate' },   // คอลัมน์ปลายทาง = expire_date (ตามรูปแบบ underscore)
     { col: 'hos_guid',      field: 'hos_guid' },
     { col: 'pttype_note',   field: 'pttype_note' },
-    { col: 'pttype_number', field: 'pttype_number', numeric: true },
-    { col: 'hn',            field: 'hn' }
+    { col: 'pttype_number', field: 'pttype_number', numeric: true }
   ]
 };
