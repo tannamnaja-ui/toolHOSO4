@@ -20,6 +20,10 @@ register(require('./visit_drugusage'));
 register(require('./visit_ipt_order_no'));
 register(require('./visit_opitemrece'));
 register(require('./visit_patient_history_hpi'));
+register(require('./visit_ipt_pttype'));
+register(require('./visit_iptdiag'));
+register(require('./visit_rcpt_debt'));
+register(require('./visit_rcpt_print'));
 
 function getRecipe(group, table) {
   return registry[group + ':' + table] || null;
