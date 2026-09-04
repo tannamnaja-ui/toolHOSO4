@@ -89,8 +89,8 @@ module.exports = {
     { col: 'pttypeno',      field: 'pttypeno' },
     { col: 'hospmain',      field: 'hospmain' },
     { col: 'hospsub',       field: 'hospsub' },
-    { col: 'begindate',     field: 'begindate' },
-    { col: 'expiredate',    field: 'expiredate' },   // (สเปกพิมพ์ xpiredate — ใช้ชื่อมาตรฐาน expiredate)
+    { col: 'begin_date',    field: 'begindate' },    // คอลัมน์ปลายทาง = begin_date
+    { col: 'expire_date',   field: 'expiredate' },   // คอลัมน์ปลายทาง = expire_date (ตามรูปแบบ underscore)
     { col: 'hos_guid',      field: 'hos_guid' },
     { col: 'pttype_note',   field: 'pttype_note' },
     { col: 'pttype_number', field: 'pttype_number', numeric: true },

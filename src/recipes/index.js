@@ -24,6 +24,7 @@ register(require('./visit_ipt_pttype'));
 register(require('./visit_iptdiag'));
 register(require('./visit_rcpt_debt'));
 register(require('./visit_rcpt_print'));
+register(require('./visit_lab_head'));
 
 function getRecipe(group, table) {
   return registry[group + ':' + table] || null;
