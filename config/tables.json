@@ -9,7 +9,16 @@
     "key": "master",
     "name": "ข้อมูลคนไข้ (Master Data)",
     "icon": "🧑‍⚕️",
-    "tables": []
+    "tables": [
+      {
+        "table": "patient",
+        "schema": "public",
+        "label": "ทะเบียนผู้ป่วย",
+        "keyColumns": [],
+        "dateColumn": "",
+        "enabled": true
+      }
+    ]
   },
   "visit": {
     "key": "visit",

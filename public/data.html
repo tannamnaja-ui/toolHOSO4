@@ -52,6 +52,27 @@
     </div>
   </div>
 
+  <!-- ============ ช่วง HN (แสดงเฉพาะตารางที่กรองด้วย HN เช่น patient) ============ -->
+  <div class="card hidden" id="hn-card">
+    <div class="card-head">
+      <span style="font-size:19px">🔢</span>
+      <h2>เลือกช่วง HN</h2>
+      <span class="sub">ตารางนี้กรองด้วยเลข HN แทนวันที่ — เว้นว่างทั้งคู่ = ดึงทั้งหมด</span>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="field" style="margin:0;min-width:200px">
+          <label>HN ตั้งแต่</label>
+          <input type="text" id="hn-from" inputmode="numeric" placeholder="เช่น 1">
+        </div>
+        <div class="field" style="margin:0;min-width:200px">
+          <label>HN ถึง</label>
+          <input type="text" id="hn-to" inputmode="numeric" placeholder="เช่น 999999">
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ ตาราง ============ -->
   <div class="card">
     <div class="card-head">

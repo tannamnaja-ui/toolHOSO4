@@ -268,7 +268,7 @@ async function diagnoseTable(tableName, btn) {
   try {
     const r = await api('/api/diagnose', {
       method: 'POST',
-      body: { group: GROUP_KEY, table: specOf(t), dateFrom: lr.dateFrom || null, dateTo: lr.dateTo || null, limit: 300 }
+      body: { group: GROUP_KEY, table: specOf(t), dateFrom: lr.dateFrom || null, dateTo: lr.dateTo || null, hnFrom: lr.hnFrom || null, hnTo: lr.hnTo || null, limit: 300 }
     });
     showDiagnoseModal(tableName, r.diagnose);
   } catch (e) {
@@ -355,22 +355,33 @@ async function run(dryRun) {
   const noDate = $('#no-date').checked;
   const dateFrom = noDate ? null : $('#date-from').value;
   const dateTo = noDate ? null : $('#date-to').value;
-  if (!noDate) {
+  const hnFrom = $('#hn-from').value.trim();
+  const hnTo = $('#hn-to').value.trim();
+  const hnTables = picked.filter(t => (state.recipes[t.table] || {}).rangeType === 'hn');
+  const dateTables = picked.filter(t => (state.recipes[t.table] || {}).rangeType !== 'hn');
+
+  if (dateTables.length && !noDate) {
     if (!dateFrom || !dateTo) { toast('กรุณาเลือกช่วงวันที่ให้ครบ', 'warn'); return; }
     if (dateFrom > dateTo) { toast('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด', 'warn'); return; }
   }
+  if (hnTables.length && (hnFrom || hnTo)) {
+    if (!hnFrom || !hnTo) { toast('กรุณากรอกช่วง HN ให้ครบ (หรือเว้นว่างทั้งคู่ = ดึงทั้งหมด)', 'warn'); return; }
+    if (Number(hnFrom) > Number(hnTo)) { toast('HN เริ่มต้นต้องไม่เกิน HN สิ้นสุด', 'warn'); return; }
+  }
 
   if (!dryRun) {
-    const msg = 'ยืนยันการโอนข้อมูล ' + picked.length + ' ตาราง\n' +
-      (noDate ? 'ช่วงวันที่: ทั้งตาราง' : 'ช่วงวันที่: ' + dateFrom + ' ถึง ' + dateTo) + '\n\n' +
-      'ระบบจะเพิ่มเฉพาะแถวที่ปลายทางยังไม่มี (ไม่แก้ไข/ลบข้อมูลเดิม)';
+    let rangeMsg = '';
+    if (dateTables.length) rangeMsg += (noDate ? 'ช่วงวันที่: ทั้งตาราง' : 'ช่วงวันที่: ' + dateFrom + ' ถึง ' + dateTo) + '\n';
+    if (hnTables.length) rangeMsg += 'ช่วง HN: ' + (hnFrom && hnTo ? hnFrom + ' ถึง ' + hnTo : 'ทั้งหมด') + '\n';
+    const msg = 'ยืนยันการโอนข้อมูล ' + picked.length + ' ตาราง\n' + rangeMsg +
+      '\nระบบจะเพิ่มเฉพาะแถวที่ปลายทางยังไม่มี (ไม่แก้ไข/ลบข้อมูลเดิม)';
     if (!confirm(msg)) return;
   }
 
   state.running = true;
   state.jobId = 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   state.lastResults = [];
-  state.lastRun = { dateFrom, dateTo, noDate };
+  state.lastRun = { dateFrom, dateTo, noDate, hnFrom, hnTo };
 
   $('#run-card').classList.remove('hidden');
   $('#result-card').classList.remove('hidden');
@@ -403,7 +414,7 @@ async function run(dryRun) {
     await streamNdjson('/api/run', {
       jobId: state.jobId,
       group: GROUP_KEY,
-      dateFrom, dateTo,
+      dateFrom, dateTo, hnFrom, hnTo,
       dryRun: !!dryRun,
       syncSequence: $('#sync-seq').checked,
       tables: picked.map(specOf)
@@ -733,6 +744,17 @@ $('#btn-manage').addEventListener('click', openManager);
     const rc = await api('/api/recipes');
     (rc.recipes || []).filter(r => r.group === GROUP_KEY).forEach(r => { state.recipes[r.table] = r; });
   } catch (e) { /* ไม่มี recipe ก็ไม่เป็นไร */ }
+
+  // ถ้ากลุ่มนี้มีตารางที่กรองด้วย HN (เช่น patient) ให้แสดงช่องช่วง HN
+  const hasHn = Object.values(state.recipes).some(r => r.rangeType === 'hn');
+  if (hasHn) {
+    $('#hn-card').classList.remove('hidden');
+    const hn = LS.get('hn:' + GROUP_KEY, null);
+    if (hn) { $('#hn-from').value = hn.from || ''; $('#hn-to').value = hn.to || ''; }
+    const saveHn = () => LS.set('hn:' + GROUP_KEY, { from: $('#hn-from').value.trim(), to: $('#hn-to').value.trim() });
+    $('#hn-from').addEventListener('change', saveHn);
+    $('#hn-to').addEventListener('change', saveHn);
+  }
 
   try { await loadGroup(); }
   catch (e) { toast('โหลดข้อมูลกลุ่มไม่สำเร็จ: ' + e.message, 'err'); }

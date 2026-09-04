@@ -125,9 +125,12 @@ app.post('/api/diagnose', wrap(async (req, res) => {
   const spec = body.table || {};
   const limit = Math.min(1000, Math.max(20, Number(body.limit) || 200));
   const recipe = getRecipe(body.group || '', spec.table);
+  const useHn = recipe && recipe.rangeType === 'hn';
+  const dFrom = useHn ? (body.hnFrom || null) : body.dateFrom;
+  const dTo = useHn ? (body.hnTo || null) : body.dateTo;
   const diagnose = recipe
-    ? await recipeRunner.diagnoseRecipe(recipe, srcCtx, tgtCtx, body.dateFrom, body.dateTo, limit)
-    : await transfer.diagnoseTable(srcCtx, tgtCtx, spec, body.dateFrom, body.dateTo, limit);
+    ? await recipeRunner.diagnoseRecipe(recipe, srcCtx, tgtCtx, dFrom, dTo, limit)
+    : await transfer.diagnoseTable(srcCtx, tgtCtx, spec, dFrom, dTo, limit);
   res.json({ ok: true, diagnose });
 }));
 
@@ -186,7 +189,11 @@ app.post('/api/run', wrap(async (req, res) => {
     try {
       const recipe = getRecipe(group, spec.table);
       if (recipe) {
-        result = await recipeRunner.transferRecipe(recipe, srcCtx, tgtCtx, dateFrom, dateTo, send, {
+        // เลือกช่วงตามชนิด: rangeType 'hn' ใช้ช่วง HN, ไม่งั้นใช้ช่วงวันที่
+        const useHn = recipe.rangeType === 'hn';
+        const rFrom = useHn ? (body.hnFrom || null) : dateFrom;
+        const rTo = useHn ? (body.hnTo || null) : dateTo;
+        result = await recipeRunner.transferRecipe(recipe, srcCtx, tgtCtx, rFrom, rTo, send, {
           dryRun: !!dryRun,
           isCancelled: () => job.cancelled
         });

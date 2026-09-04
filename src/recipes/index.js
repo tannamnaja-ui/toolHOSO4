@@ -25,6 +25,7 @@ register(require('./visit_iptdiag'));
 register(require('./visit_rcpt_debt'));
 register(require('./visit_rcpt_print'));
 register(require('./visit_lab_head'));
+register(require('./master_patient'));
 
 function getRecipe(group, table) {
   return registry[group + ':' + table] || null;
@@ -35,6 +36,7 @@ function listRecipes() {
   return Object.values(registry).map(r => ({
     group: r.group, table: r.table, label: r.label,
     keyColumns: r.targetKey, dateColumn: r.dateColumn || '',
+    rangeType: r.rangeType || 'date',
     columns: r.columns.length, lookups: Object.keys(r.lookups || {}).length
   }));
 }
