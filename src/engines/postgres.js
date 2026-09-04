@@ -95,14 +95,15 @@ async function describeTable(pool, schema, table) {
   if (!ex.rowCount) return { exists: false, columns: [], primaryKey: [], uniqueKey: [], dateColumns: [] };
 
   const colsQ = await pool.query(
-    `select column_name, data_type, udt_name, is_nullable, is_identity, identity_generation, is_generated
+    `select column_name, data_type, udt_name, is_nullable, is_identity, identity_generation, is_generated, character_maximum_length
      from information_schema.columns where table_schema=$1 and table_name=$2 order by ordinal_position`,
     [schema, table]);
   const columns = colsQ.rows.map(x => ({
     name: x.column_name, type: x.data_type, udt: x.udt_name,
     nullable: x.is_nullable === 'YES',
     identity: x.is_identity === 'YES' ? (x.identity_generation || 'BY DEFAULT') : null,
-    generated: x.is_generated === 'ALWAYS'
+    generated: x.is_generated === 'ALWAYS',
+    maxLen: x.character_maximum_length ? Number(x.character_maximum_length) : null
   }));
 
   const pkQ = await pool.query(

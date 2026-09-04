@@ -3,8 +3,8 @@
    ============================================================ */
 
 /* เวอร์ชันแอป — อัปเดตค่านี้เมื่อมีการแก้ไข (แสดงมุมซ้ายบนต่อจากชื่อ) */
-const APP_VERSION = 'v1.10.1';
-const APP_VERSION_DATE = '2026-08-31';
+const APP_VERSION = 'v1.11.0';
+const APP_VERSION_DATE = '2026-09-05';
 
 const $  = (sel, root) => (root || document).querySelector(sel);
 const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));

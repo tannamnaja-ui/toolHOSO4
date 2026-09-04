@@ -111,19 +111,21 @@ async function describeTable(pool, schema, table) {
   if (!Number(ex.n)) return { exists: false, columns: [], primaryKey: [], uniqueKey: [], dateColumns: [] };
 
   const [colRows] = await pool.query(
-    `select column_name, data_type, column_type, is_nullable, extra, column_key
+    `select column_name, data_type, column_type, is_nullable, extra, column_key, character_maximum_length
      from information_schema.columns
      where table_schema = coalesce(?, database()) and table_name = ?
      order by ordinal_position`, [s, table]);
   const columns = colRows.map(x => {
     const extra = String(x.extra || x.EXTRA || '').toLowerCase();
+    const ml = x.character_maximum_length != null ? x.character_maximum_length : x.CHARACTER_MAXIMUM_LENGTH;
     return {
       name: x.column_name || x.COLUMN_NAME,
       type: x.data_type || x.DATA_TYPE,
       udt: x.column_type || x.COLUMN_TYPE,
       nullable: (x.is_nullable || x.IS_NULLABLE) === 'YES',
       identity: extra.includes('auto_increment') ? 'BY DEFAULT' : null,
-      generated: extra.includes('generated')
+      generated: extra.includes('generated'),
+      maxLen: ml != null ? Number(ml) : null
     };
   });
 

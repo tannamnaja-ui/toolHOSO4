@@ -25,6 +25,8 @@ register(require('./visit_iptdiag'));
 register(require('./visit_rcpt_debt'));
 register(require('./visit_rcpt_print'));
 register(require('./visit_lab_head'));
+register(require('./visit_lab_order'));
+register(require('./visit_lab_order_service'));
 register(require('./master_patient'));
 
 function getRecipe(group, table) {

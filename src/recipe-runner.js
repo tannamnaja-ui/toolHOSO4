@@ -146,6 +146,35 @@ async function resolveAllMaps(tgtCtx, recipe, rows) {
   return maps;
 }
 
+/** ตรวจตารางปลายทาง: ตัดคอลัมน์ที่ไม่มีออก + เก็บความยาวสูงสุดของแต่ละคอลัมน์
+ *  คืน { cols, maxLen } — maxLen ใช้ตัดค่าที่ยาวเกินคอลัมน์อัตโนมัติ (กัน error "value too long") */
+async function filterExistingColumns(tgtCtx, recipe, result) {
+  try {
+    const t = await tgtCtx.eng.describeTable(tgtCtx.pool, recipe.schema || 'public', recipe.table);
+    if (!t.exists || !t.columns.length) return { cols: recipe.columns, maxLen: {} };
+    const have = new Set(t.columns.map(c => c.name));
+    const maxLen = {};
+    t.columns.forEach(c => { if (c.maxLen) maxLen[c.name] = c.maxLen; });
+    const dropped = recipe.columns.filter(c => !have.has(c.col)).map(c => c.col);
+    if (dropped.length && result) result.warnings.push('ข้ามคอลัมน์ที่ไม่มีในปลายทาง: ' + dropped.join(', '));
+    const kept = recipe.columns.filter(c => have.has(c.col));
+    return { cols: kept.length ? kept : recipe.columns, maxLen };
+  } catch (e) {
+    return { cols: recipe.columns, maxLen: {} };
+  }
+}
+
+/** ตัดค่าสตริงให้พอดีความยาวคอลัมน์ปลายทางอัตโนมัติ (ถ้าต้นทางยาวเกินที่ปลายทางเก็บได้)
+ *  ทำหลัง encStrip แล้ว (WIN874 เป็น 1 ไบต์/ตัว => นับตัวอักษร = นับไบต์) — ใช้ทุกสูตร */
+function fitLen(v, col, maxLen, truncated) {
+  const m = maxLen[col];
+  if (m && typeof v === 'string' && v.length > m) {
+    if (truncated) truncated[col] = (truncated[col] || 0) + 1;
+    return v.slice(0, m);
+  }
+  return v;
+}
+
 /** อ่านค่าสูงสุดของคอลัมน์ในตารางปลายทาง (ใช้กับ seqFromMax)
  *  ไม่ใช้ coalesce เพื่อรองรับคอลัมน์ที่เป็นสตริงตัวเลขเติมศูนย์ (เช่น '0000123') */
 async function getMaxColumn(tgtCtx, schema, table, column) {
@@ -246,31 +275,47 @@ function compositeKey(vals) {
   }));
 }
 
-/* ---------- หาแถวที่ปลายทางยังไม่มี (ตามคีย์ เดี่ยวหรือหลายคอลัมน์) ---------- */
-async function findMissingRows(tgtCtx, recipe, rows, onProgress) {
+/* ---------- หาแถวที่ปลายทางยังไม่มี (ตามคีย์ เดี่ยวหรือหลายคอลัมน์)
+   keyValsFn(row) -> array ของค่าคีย์ (เรียงตรงกับ targetKey); ถ้าไม่ส่ง = ใช้ค่าฟิลด์ต้นทางตรง ๆ
+   ใช้ keyValsFn เมื่อคีย์ปลายทางเป็นค่าหลัง lookup (recipe.keyAfterLookup) ---------- */
+async function findMissingRows(tgtCtx, recipe, rows, onProgress, keyValsFn) {
   const eng = tgtCtx.eng;
   const keyFields = keyFieldsOf(recipe);      // ฟิลด์ในผลคิวรี่
   const targetCols = recipe.targetKey;        // คอลัมน์ปลายทาง (เรียงตรงกับ keyFields)
+  const keyVals = keyValsFn || (r => keyFields.map(f => r[f]));
   const qcols = targetCols.map(eng.quote).join(', ');
   const table = eng.qname(recipe.schema || 'public', recipe.table);
   const size = Math.max(200, Math.min(2000, Math.floor(MAX_PARAMS / targetCols.length)));
   const missing = [];
   let done = 0;
   for (const batch of chunk(rows, size)) {
-    // สร้าง object คีย์ (keyed by คอลัมน์ปลายทาง) จากค่าฟิลด์ต้นทาง
+    // สร้าง object คีย์ (keyed by คอลัมน์ปลายทาง) จากค่าคีย์ของแต่ละแถว
     const keyRows = batch.map(r => {
-      const o = {}; targetCols.forEach((tc, i) => { o[tc] = r[keyFields[i]]; }); return o;
+      const vals = keyVals(r);
+      const o = {}; targetCols.forEach((tc, i) => { o[tc] = vals[i]; }); return o;
     });
     const pred = buildKeyPredicate(eng, targetCols, keyRows, 1);
     const res = await eng.query(tgtCtx.pool, 'select ' + qcols + ' from ' + table + ' where ' + pred.sql, pred.params, { array: true });
     const exist = new Set(res.rows.map(arr => compositeKey(arr)));
     for (const r of batch) {
-      if (!exist.has(compositeKey(keyFields.map(f => r[f])))) missing.push(r);
+      if (!exist.has(compositeKey(keyVals(r)))) missing.push(r);
     }
     done += batch.length;
     if (onProgress) onProgress({ checked: done, total: rows.length, missing: missing.length });
   }
   return missing;
+}
+
+/** สร้างฟังก์ชันคำนวณค่าคีย์หลัง lookup (สำหรับ recipe.keyAfterLookup)
+ *  ค่าคีย์ = ค่าที่จะ insert จริง (ผ่าน valueFor) ของคอลัมน์คีย์ปลายทาง */
+function makeKeyValsFn(recipe, maps) {
+  const byTarget = {};
+  recipe.columns.forEach(c => { byTarget[c.col] = c; });
+  const rowCtx = { index: 0, seqBase: {} };
+  return row => recipe.targetKey.map(tc => {
+    const c = byTarget[tc];
+    return c ? valueFor(row, c, maps, {}, rowCtx) : row[tc];
+  });
 }
 
 async function countTargetByDate(tgtCtx, recipe, from, to) {
@@ -374,10 +419,24 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   }
 
   // 2) หาแถวที่ปลายทางยังไม่มี (ตามคีย์)
+  // ถ้าคีย์ปลายทางเป็นค่าหลัง lookup ต้อง resolve map ก่อน แล้วเทียบด้วยค่าที่ผ่าน lookup
+  let maps = null, keyValsFn = null;
+  if (recipe.keyAfterLookup) {
+    emit({ type: 'stage', table: recipe.table, stage: 'แปลงค่าอ้างอิงเพื่อตรวจคีย์ (lookup)...' });
+    try {
+      maps = await resolveAllMaps(tgtCtx, recipe, uniq);
+    } catch (e) {
+      result.status = 'error';
+      result.error = 'lookup (คีย์) ล้มเหลว: ' + shortErr(e);
+      return result;
+    }
+    keyValsFn = makeKeyValsFn(recipe, maps);
+  }
+
   emit({ type: 'stage', table: recipe.table, stage: 'ตรวจหาคีย์ที่ขาดในปลายทาง...' });
   const tCheck = Date.now();
   const missingRows = await findMissingRows(tgtCtx, recipe, uniq,
-    p => emit(Object.assign({ type: 'progress', table: recipe.table, phase: 'check' }, p)));
+    p => emit(Object.assign({ type: 'progress', table: recipe.table, phase: 'check' }, p)), keyValsFn);
   timing.checkMs = Date.now() - tCheck;
   result.missingRows = missingRows.length;
   emit({ type: 'stage', table: recipe.table, stage: 'ตรวจคีย์ที่ขาดเสร็จใน ' + secSince(tCheck) + ' วินาที (ขาด ' + missingRows.length.toLocaleString() + ')' });
@@ -394,15 +453,16 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
     return result;
   }
 
-  // 3) resolve lookups (บนปลายทาง)
-  emit({ type: 'stage', table: recipe.table, stage: 'แปลงค่าอ้างอิง (lookup) ปลายทาง...' });
-  let maps;
-  try {
-    maps = await resolveAllMaps(tgtCtx, recipe, missingRows);
-  } catch (e) {
-    result.status = 'error';
-    result.error = 'lookup ล้มเหลว: ' + shortErr(e);
-    return result;
+  // 3) resolve lookups (บนปลายทาง) — ถ้าตรวจคีย์หลัง lookup ไปแล้วใช้ map เดิมได้เลย
+  if (!maps) {
+    emit({ type: 'stage', table: recipe.table, stage: 'แปลงค่าอ้างอิง (lookup) ปลายทาง...' });
+    try {
+      maps = await resolveAllMaps(tgtCtx, recipe, missingRows);
+    } catch (e) {
+      result.status = 'error';
+      result.error = 'lookup ล้มเหลว: ' + shortErr(e);
+      return result;
+    }
   }
 
   // 3.5) เตรียมค่าเริ่มต้นของคอลัมน์ที่รันเลขต่อจากค่าสูงสุดในปลายทาง (seqFromMax)
@@ -414,15 +474,18 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
     }
   }
 
-  // 4) สร้างแถว insert
+  // 4) สร้างแถว insert — ตัดคอลัมน์ที่ไม่มีในตารางปลายทางออกอัตโนมัติ + ตัดค่าที่ยาวเกินคอลัมน์
   const tgtEng = tgtCtx.eng;
-  const cols = recipe.columns.map(c => c.col);
+  const { cols: useCols, maxLen } = await filterExistingColumns(tgtCtx, recipe, result);
+  const cols = useCols.map(c => c.col);
   const unmatched = {};
+  const truncated = {};
   // ถ้าปลายทางเป็น WIN874 ให้ตัดอักขระที่เก็บไม่ได้ออก (เก็บที่เหลือ ไม่ทิ้งทั้งแถว)
   const tgtEncoding = await detectTargetEncoding(tgtCtx);
   const encStrip = tgtEncoding === 'WIN874' ? (v => (typeof v === 'string' ? stripToWin874(v) : v)) : (v => v);
   if (tgtEncoding === 'WIN874') emit({ type: 'stage', table: recipe.table, stage: 'ปลายทางเป็น WIN874 — จะตัดอักขระที่เก็บไม่ได้ออก' });
-  const built = missingRows.map((row, i) => recipe.columns.map(c => encStrip(valueFor(row, c, maps, unmatched, { index: i, seqBase }))));
+  const built = missingRows.map((row, i) => useCols.map(c =>
+    fitLen(encStrip(valueFor(row, c, maps, unmatched, { index: i, seqBase })), c.col, maxLen, truncated)));
 
   const writeSize = Math.max(50, Math.min(500, Math.floor(MAX_PARAMS / Math.max(1, cols.length))));
   let inserted = 0, failed = 0;
@@ -455,6 +518,10 @@ async function transferRecipe(recipe, srcCtx, tgtCtx, from, to, emit, options) {
   for (const [name, set] of Object.entries(unmatched)) {
     if (set.size) result.warnings.push('lookup "' + name + '" ไม่พบค่าที่ตรงกัน ' + set.size + ' รายการ (ใส่ NULL)');
   }
+  // สรุปค่าที่ถูกตัดให้พอดีความยาวคอลัมน์ปลายทาง
+  for (const [col, n] of Object.entries(truncated)) {
+    result.warnings.push('ตัดค่าให้พอดีความยาวคอลัมน์ "' + col + '" (' + maxLen[col] + ' ตัวอักษร) จำนวน ' + n + ' แถว');
+  }
 
   result.status = result.cancelled ? 'cancelled' : (failed ? 'partial' : 'ok');
   result.inserted = inserted;
@@ -486,15 +553,22 @@ async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
     seen.add(k);
     uniq.push(r);
   }
-  const stillMissing = await findMissingRows(tgtCtx, recipe, uniq);
+  // ถ้าคีย์เป็นค่าหลัง lookup: resolve map บน uniq ก่อน แล้วเทียบคีย์ด้วยค่าที่ผ่าน lookup
+  let maps = null, keyValsFn = null;
+  if (recipe.keyAfterLookup) {
+    maps = await resolveAllMaps(tgtCtx, recipe, uniq);
+    keyValsFn = makeKeyValsFn(recipe, maps);
+  }
+  const stillMissing = await findMissingRows(tgtCtx, recipe, uniq, null, keyValsFn);
   const sample = stillMissing.slice(0, limit);
 
-  const maps = await resolveAllMaps(tgtCtx, recipe, sample);
+  if (!maps) maps = await resolveAllMaps(tgtCtx, recipe, sample);
   const seqBase = {};
   for (const c of recipe.columns) {
     if (c.seqFromMax) seqBase[c.col] = await getMaxColumn(tgtCtx, recipe.schema || 'public', recipe.table, c.col);
   }
-  const cols = recipe.columns.map(c => c.col);
+  const { cols: useCols, maxLen } = await filterExistingColumns(tgtCtx, recipe, null);
+  const cols = useCols.map(c => c.col);
   const tgtEng = tgtCtx.eng;
   const grouper = makeReasonGrouper();
   let okInsert = 0;
@@ -511,7 +585,7 @@ async function diagnoseRecipe(recipe, srcCtx, tgtCtx, from, to, limit) {
 
   for (let i = 0; i < sample.length; i++) {
     const row = sample[i];
-    const vals = recipe.columns.map(c => encStrip(valueFor(row, c, maps, {}, { index: i, seqBase })));
+    const vals = useCols.map(c => fitLen(encStrip(valueFor(row, c, maps, {}, { index: i, seqBase })), c.col, maxLen, null));
     const sql = tgtEng.buildInsertPlain(recipe.schema || 'public', recipe.table, cols, 1, { overriding: false });
     const disp = keyFields.map(f => f + '=' + fmt(row[f])).join(', ');
     const res = await tgtEng.diagnoseInsert(tgtCtx.pool, sql, vals);

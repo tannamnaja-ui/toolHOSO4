@@ -148,6 +148,9 @@ async function planTable(srcCtx, tgtCtx, spec) {
 
   plan.keyColumns = keyColumns;
   plan.columns = common;
+  // ความยาวสูงสุดของคอลัมน์ปลายทาง (ไว้ตัดค่าที่ยาวเกินอัตโนมัติ กัน error "value too long")
+  plan.maxLen = {};
+  common.forEach(n => { const m = (tgtByName.get(n) || {}).maxLen; if (m) plan.maxLen[n] = m; });
   plan.srcOnly = src.columns.map(c => c.name).filter(n => !tgtNames.has(n));
   plan.tgtOnly = tgt.columns.map(c => c.name).filter(n => !srcNames.has(n));
   plan.overriding = common.some(n => (tgtByName.get(n) || {}).identity === 'ALWAYS');
@@ -286,6 +289,15 @@ async function transferTable(srcCtx, tgtCtx, spec, from, to, emit, options) {
   const sanitize = makeValueSanitizer(tgtEncoding);
   if (tgtEncoding === 'WIN874') emit({ type: 'stage', table: plan.table, stage: 'ปลายทางเป็น WIN874 — จะตัดอักขระที่เก็บไม่ได้ออก' });
 
+  // ตัดค่าที่ยาวเกินความยาวคอลัมน์ปลายทางอัตโนมัติ (ตามตำแหน่งคอลัมน์ใน cols)
+  const colMax = cols.map(c => plan.maxLen[c] || 0);
+  const truncated = {};
+  const fitRow = r => r.map((v, i) => {
+    const m = colMax[i];
+    if (m && typeof v === 'string' && v.length > m) { truncated[cols[i]] = (truncated[cols[i]] || 0) + 1; return v.slice(0, m); }
+    return v;
+  });
+
   let inserted = 0, failed = 0;
   const errors = [];
   emit({ type: 'stage', table: plan.table, stage: 'กำลังโอน ' + missing.length.toLocaleString() + ' แถว...' });
@@ -295,7 +307,7 @@ async function transferTable(srcCtx, tgtCtx, spec, from, to, emit, options) {
     const pred = buildKeyPredicate(srcEng, plan.keyColumns, keyBatch, 1);
     const sel = 'select ' + srcColList + ' from ' + srcEng.qname(plan.schema, plan.table) + ' where ' + pred.sql;
     const rowsRaw = (await srcEng.query(srcCtx.pool, sel, pred.params, { array: true })).rows;
-    const rows = rowsRaw.map(r => r.map(sanitize));
+    const rows = rowsRaw.map(r => fitRow(r.map(sanitize)));
 
     for (const rowBatch of chunk(rows, writeSize)) {
       if (options.isCancelled && options.isCancelled()) { result.cancelled = true; break; }
@@ -324,6 +336,10 @@ async function transferTable(srcCtx, tgtCtx, spec, from, to, emit, options) {
 
   if (options.syncSequence !== false && !result.cancelled) {
     result.sequences = await tgtEng.syncSequences(tgtCtx.pool, plan.schema, plan.table, plan.keyColumns);
+  }
+
+  for (const [col, n] of Object.entries(truncated)) {
+    result.warnings.push('ตัดค่าให้พอดีความยาวคอลัมน์ "' + col + '" (' + plan.maxLen[col] + ' ตัวอักษร) จำนวน ' + n + ' แถว');
   }
 
   result.status = result.cancelled ? 'cancelled' : (failed ? 'partial' : 'ok');
