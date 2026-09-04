@@ -95,9 +95,11 @@ module.exports = {
   schema: 'public',
   dateColumn: 'laborder_date',
   targetDateColumn: 'laborder_date',
-  // 1 order มีได้หลายผล -> คีย์ประกอบ (hos_guid=t_order_id, specimen_code=รหัสรายการ)
-  targetKey: ['hos_guid', 'specimen_code'],
-  keyFields: ['hos_guid', 'specimen_code'],
+  // 1 order มีได้หลายรายการแล็บ -> คีย์ประกอบ (hos_guid=t_order_id, lab_items_code)
+  // lab_items_code เป็นค่าหลัง lookup (lab_items.hos_guid -> lab_items_code) => keyAfterLookup
+  targetKey: ['hos_guid', 'lab_items_code'],
+  keyFields: ['hos_guid', 'lab_items_code'],
+  keyAfterLookup: true,
 
   source: { engine: 'postgres', sql: sourceSql },
 
